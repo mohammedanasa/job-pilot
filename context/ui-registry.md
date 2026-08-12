@@ -207,3 +207,98 @@ Last updated: 2026-06-22
 
 **Pattern notes:**
 Profile session controls live inside the existing profile placeholder card behind a top divider. The logout action uses the bordered secondary button pattern rather than the dark primary CTA so it does not compete with future profile save actions.
+
+### CompletionBanner
+
+File: components/profile/CompletionBanner.tsx
+Last updated: 2026-06-24
+
+| Property         | Class                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| Background       | `bg-surface`                                                                               |
+| Border           | `border border-border`                                                                     |
+| Border radius    | `rounded-2xl`                                                                              |
+| Text — primary   | `text-sm font-semibold leading-5 text-text-primary`                                        |
+| Text — secondary | `text-sm font-medium leading-5 text-text-secondary`                                        |
+| Spacing          | `p-6`, missing field tags use `px-3 py-0.5`                                                |
+| Shadow           | `shadow-sm`                                                                                |
+| Accent usage     | Ring stroke uses `var(--color-error)`; missing field tags use `border-border text-text-secondary` |
+
+**Pattern notes:**
+Donut ring is inline SVG — radius 36, circumference-based dashoffset for percentage fill, red error stroke, percentage as SVG text centered at 50/50. Missing field tags are pill-shaped with border and uppercase tracking.
+
+### ResumeSection
+
+File: components/profile/ResumeSection.tsx
+Last updated: 2026-06-24
+
+| Property         | Class                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| Background       | `bg-surface`, drag zone uses `bg-surface-secondary` / `bg-accent-muted` on drag   |
+| Border           | `border border-border`, drop zone uses `border-2 border-dashed`                   |
+| Border radius    | `rounded-2xl` card, `rounded-xl` drop zone, `rounded-md` buttons                  |
+| Text — primary   | `text-sm font-medium leading-5 text-text-primary`                                  |
+| Text — secondary | `text-xs font-normal leading-4 text-text-muted`                                    |
+| Spacing          | `p-6` card, `px-6 py-10` drop zone                                                 |
+| Shadow           | `shadow-sm`                                                                        |
+| Accent usage     | Generate button uses `bg-accent text-accent-foreground`; drag active uses `border-accent bg-accent-muted` |
+
+**Pattern notes:**
+Drop zone switches border/bg on drag-over via `isDragging` state. File name replaces upload prompt text after selection. Select Resume uses secondary button; Generate Resume uses primary accent button aligned to the right.
+
+### TagInput
+
+File: components/profile/TagInput.tsx
+Last updated: 2026-06-24
+
+| Property         | Class                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| Background       | `bg-surface`                                                                              |
+| Border           | `border border-border`, `focus-within:border-accent focus-within:ring-1 focus-within:ring-accent` |
+| Border radius    | `rounded-md` container, `rounded-full` tags, `rounded-md` dropdown items                 |
+| Text — primary   | `text-sm font-medium text-text-primary`                                                   |
+| Text — secondary | `placeholder:text-text-muted`                                                             |
+| Spacing          | `px-3 py-2` container, `px-3 py-0.5` tags, `px-3 py-2` dropdown items                   |
+| Hover state      | `hover:bg-surface-secondary` dropdown items                                               |
+| Accent usage     | Tags use `bg-accent-light text-accent`; focus ring uses `ring-accent border-accent`       |
+
+**Pattern notes:**
+Tags render as accent-light pills with × remove inside the input container. Autocomplete dropdown appears below as absolute-positioned list. `onBlur` uses 150ms delay to allow `onMouseDown` on dropdown items to fire before close. Add button triggers free-text add when input has value; Enter also triggers autocomplete first match or free-text fallback.
+
+### WorkExperienceCard
+
+File: components/profile/WorkExperienceCard.tsx
+Last updated: 2026-06-24
+
+| Property         | Class                                                                         |
+| ---------------- | ----------------------------------------------------------------------------- |
+| Background       | `bg-surface-secondary`                                                        |
+| Border           | `border border-border`                                                        |
+| Border radius    | `rounded-xl`                                                                  |
+| Text — primary   | `text-sm font-medium text-text-primary`                                       |
+| Text — secondary | `text-xs font-medium uppercase tracking-wide text-text-secondary`             |
+| Spacing          | `p-4 gap-4`                                                                   |
+| Hover state      | Remove button `hover:text-error`                                               |
+| Accent usage     | `checkbox accent-accent`, inputs use `focus:border-accent focus:ring-accent`  |
+
+**Pattern notes:**
+Card background is `surface-secondary` to visually distinguish role cards from the parent form surface. End Date field disables when `currentlyWorking` is checked. Remove button only renders when `canRemove` is true (i.e. more than one card exists).
+
+### ProfileForm
+
+File: components/profile/ProfileForm.tsx
+Last updated: 2026-06-24
+
+| Property         | Class                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| Background       | `bg-surface`                                                                                       |
+| Border           | `border border-border`, section dividers use `border-t border-border`                              |
+| Border radius    | `rounded-2xl` card, `rounded-md` inputs/selects/buttons                                            |
+| Text — primary   | `text-base font-semibold leading-6 text-text-primary` headings, `text-sm font-medium text-text-primary` body |
+| Text — secondary | `text-xs font-medium uppercase tracking-wide text-text-secondary` labels                           |
+| Spacing          | `p-6 gap-6` card, `gap-4` within sections, `grid grid-cols-2 gap-4` field pairs                   |
+| Shadow           | `shadow-sm`                                                                                        |
+| Accent usage     | Save Profile button uses `bg-accent text-accent-foreground`; section headings use no accent        |
+
+**Pattern notes:**
+Entire form is a single `"use client"` component with all state co-located. Sections separated by `border-t border-border` dividers within one card. Email field uses `bg-surface-secondary cursor-not-allowed` read-only treatment. Work Experience section manages a `WorkExperience[]` array — add (max 3) and remove (min 1) controlled by length checks. TagInput reused for both Skills and Industries with separate suggestion arrays.

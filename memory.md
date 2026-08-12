@@ -1,64 +1,58 @@
-# Memory — Feature 04 Database Schema Complete
+# Memory — Feature 05 Profile Page Full UI
 
 Last updated: 2026-06-24
 
 ## What was built
 
-Feature 04 Database Schema is complete.
+Feature 05 Profile Page Full UI is complete.
 
-Migration and schema files created:
-- `migrations/20260624131107_create-schema.sql` — applied migration (tracked by InsForge)
-- `scripts/setup-db.sql` — standalone reference copy (can be deleted)
+Files created:
+- `lib/skills.ts` — hardcoded array of ~55 tech skill strings for autocomplete
+- `components/profile/CompletionBanner.tsx` — SVG donut ring (inline, circumference-based), red error stroke, missing field pill tags
+- `components/profile/ResumeSection.tsx` — drag-and-drop upload zone with drag state, file name display, Select Resume + Generate Resume from Profile buttons
+- `components/profile/TagInput.tsx` — autocomplete tag input with dropdown, free-text Add fallback, Backspace removal, 150ms blur delay for click safety
+- `components/profile/WorkExperienceCard.tsx` — single role card with all fields; End Date disables on currentlyWorking; exports `WorkExperience` type
+- `components/profile/ProfileForm.tsx` — full "use client" form with all five sections (Personal Info, Professional Info, Work Experience, Education, Job Preferences); mock data pre-filled; work experience managed as array (1 default, add up to 3, remove but never below 1)
 
-Tables live on the InsForge backend:
-- `profiles` — with `updated_at` auto-trigger, FK → `auth.users CASCADE`
-- `agent_runs` — FK → `profiles CASCADE`
-- `jobs` — FK → `profiles CASCADE`, `run_id → agent_runs SET NULL`, CHECK on `source IN ('search','url')`
-- `agent_logs` — FK → `agent_runs CASCADE` + `profiles CASCADE`, CHECK on `level IN ('info','success','warning','error')`
-
-Storage:
-- `resumes` bucket created (private, Public: No)
-
-Tracking docs updated:
-- `context/progress-tracker.md` — Feature 04 marked complete, next is 05
-
-InsForge CLI setup done this session:
-- Logged in via `npx @insforge/cli login --user-api-key`
-- Linked to project `9206977a-a6a4-48b2-a3a9-acba3294229b` (Job Pilot, 4brsdh32.ap-southeast)
-- InsForge CLI skills installed globally (`insforge`, `insforge-cli`, `insforge-debug`, `insforge-integrations`)
-- Project config written to `.insforge/project.json`
+Files modified:
+- `app/profile/page.tsx` — replaced placeholder with CompletionBanner + ResumeSection + ProfileForm; auth guard preserved
+- `context/progress-tracker.md` — Feature 05 marked complete, next is 06; Feature 04 also corrected to complete
+- `context/ui-registry.md` — all five new components imprinted with full pattern tables
 
 ## Decisions made
 
-- All four tables use `ON DELETE CASCADE` from profiles — orphaned rows have no meaning without a user.
-- `profiles.updated_at` is trigger-maintained — application code never needs to set it explicitly.
-- `profiles` RLS uses `id = auth.uid()` (the PK is the auth user ID); all other tables use `user_id = auth.uid()`.
-- All RLS policies include `WITH CHECK` so writes cannot create rows the user should not own.
-- InsForge MCP plugin was not installed — used the InsForge CLI (`npx @insforge/cli`) instead for all infrastructure tasks. Use CLI going forward, not the MCP.
-- Migration is the authoritative record; `scripts/setup-db.sql` is a reference copy only.
+- `ProfileForm.tsx` is a single "use client" component holding all form state — no sub-section client components. Keeps state co-located and avoids prop drilling.
+- Skills autocomplete uses a hardcoded list in `lib/skills.ts`. Free-text Add works for anything not on the list.
+- Industries suggestions are defined inline in `ProfileForm.tsx` (not in a shared lib file) — small enough list that a separate file is unnecessary.
+- Work experience cards use `bg-surface-secondary` to visually distinguish them from the parent `bg-surface` card.
+- `WorkExperienceCard` is a Server-compatible presentation component (no `"use client"`) — state is managed by `ProfileForm`.
+- Email field is read-only with `bg-surface-secondary cursor-not-allowed text-text-muted` — not `disabled` so the value is still accessible.
+- Donut ring built with inline SVG — no chart library. `circumference - (pct/100) * circumference` for dashoffset, rotated -90deg.
 
 ## Problems solved
 
-- InsForge MCP tools (`run-raw-sql`, `create-bucket`) were not installed as a plugin. Resolved by running `npx @insforge/cli login` + `link`, which installed the CLI skills. All schema work done via `npx @insforge/cli db migrations` and `npx @insforge/cli storage create-bucket`.
+- ESLint `react/no-unescaped-entities` error on `Bachelor's` and `Master's` in select options — fixed with `&apos;` HTML entities.
+- `npm run lint` and `npm run build` both pass cleanly after the fix.
 
 ## Current state
 
-- All four tables live on InsForge with RLS enabled and verified.
-- `resumes` storage bucket exists and is private.
-- `npm run lint` and `npm run build` — not run this session (no application code changed, infrastructure only).
-- `context/progress-tracker.md` marks Feature 04 complete and Feature 05 next.
+- Full profile page UI renders with mock data. All five form sections visible and interactive.
+- Tag inputs autocomplete against skill/industry lists. Work experience add/remove works.
+- Drag-and-drop upload zone is wired (sets file name state) but does not upload — that is Feature 06.
+- Save Profile button submits the form but has no action wired — that is Feature 06.
+- `npm run lint` and `npm run build` pass.
 
 ## Next session starts with
 
-Start Feature 05 — Profile Page Full UI from `context/build-plan.md`.
+Start Feature 06 — Profile Save Logic from `context/build-plan.md`.
 
 Before implementing:
 1. Run `/remember restore` to load this context.
-2. Read the required context files listed in `AGENTS.md` (including `ui-tokens.md`, `ui-rules.md`, `ui-registry.md`).
-3. Run `/architect feature 05` before writing any code.
-4. Build full UI with mock data first — no save logic yet (that is Feature 06).
+2. Run `/architect feature 06` before writing any code.
+3. Key scope: Server Action in `actions/profile.ts`, resume PDF upload to InsForge Storage at `resumes/{user_id}/resume.pdf`, `resume_pdf_url` saved to profiles table, completion percentage calculated, `revalidatePath('/profile')` called after save, form pre-fills with existing data on return visits.
 
 ## Open questions
 
-- `scripts/setup-db.sql` is a duplicate of the migration. Can be deleted once the team is comfortable relying on the `migrations/` folder alone.
-- `.insforge/project.json` should not be committed — confirm it is in `.gitignore`.
+- The profile page currently uses `"faizan@someplace.pro"` as mock email. Feature 06 should replace this with the real `data.user.email` passed down as a prop to `ProfileForm`.
+- `scripts/setup-db.sql` is a duplicate of the migration. Can be deleted once team is comfortable.
+- `.insforge/project.json` should be confirmed in `.gitignore`.

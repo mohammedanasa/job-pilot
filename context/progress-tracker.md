@@ -6,9 +6,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Phase 1 — Foundation
-**Last completed:** 03 PostHog Initialization
-**Next:** 04 Database Schema
+**Phase:** Phase 2 — Profile Page
+**Last completed:** 05 Profile Page — Full UI
+**Next:** 06 Profile Save Logic
 
 ---
 
@@ -19,11 +19,11 @@ Update this file after every completed feature. Any AI agent reading this should
 - [x] 01 Homepage
 - [x] 02 Auth
 - [x] 03 PostHog Initialization
-- [ ] 04 Database Schema
+- [x] 04 Database Schema
 
 ### Phase 2 — Profile Page
 
-- [ ] 05 Profile Page — Full UI
+- [x] 05 Profile Page — Full UI
 - [ ] 06 Profile Save Logic
 - [ ] 07 AI Profile Extraction from Resume
 - [ ] 08 Resume PDF Generation from Profile
@@ -60,6 +60,7 @@ Update this file after every completed feature. Any AI agent reading this should
 - 2026-06-22 — Feature 03 initializes PostHog through Next.js `instrumentation-client.ts`, centralizes browser identity helpers in `lib/posthog-client.ts`, and uses request-scoped server captures in `lib/posthog-server.ts` so each server event flushes before returning.
 - 2026-06-22 — PostHog tracking is limited to the approved event whitelist: `job_search_started`, `job_found`, `profile_completed`, and `company_researched`.
 - 2026-06-22 — Profile page logout calls the InsForge client `auth.signOut()`, posts to `/api/auth/logout` to clear SSR auth cookies, then clears the OAuth verifier, resets PostHog identity, and routes to `/login`.
+- 2026-06-24 — Feature 05 Profile Page full UI built with mock data. SVG donut ring completion banner, drag-and-drop resume upload section, full ProfileForm with Personal Info, Professional Info (skills autocomplete from hardcoded list), Work Experience (1 default card, add up to 3), Education, and Job Preferences sections. No save logic — that is Feature 06.
 
 ---
 
