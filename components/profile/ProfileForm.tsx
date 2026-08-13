@@ -6,7 +6,7 @@ import { WorkExperienceCard, type WorkExperience } from "@/components/profile/Wo
 import { ResumeSection } from "@/components/profile/ResumeSection";
 import { saveProfile } from "@/actions/profile";
 import { SKILL_SUGGESTIONS } from "@/lib/skills";
-import type { ProfileData } from "@/types";
+import type { ExtractedProfile, ProfileData } from "@/types";
 
 const INDUSTRY_SUGGESTIONS = [
   "FinTech",
@@ -105,6 +105,77 @@ export function ProfileForm({ initialData, userEmail }: Props) {
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ success: boolean; error?: string } | null>(null);
 
+  /**
+   * Apply AI-extracted resume data to the form.
+   *
+   * Only resume-derived fields are touched — job preferences are intentions,
+   * not history, so extraction never overwrites them. Fields the resume did not
+   * cover are left as they are rather than blanked, so a resume with no
+   * education section does not wipe education the user typed in.
+   *
+   * Nothing is persisted here. The user reviews and presses Save Profile.
+   */
+  function applyExtracted(data: ExtractedProfile) {
+    const hasContent =
+      fullName.trim() !== "" ||
+      phone.trim() !== "" ||
+      location.trim() !== "" ||
+      linkedinUrl.trim() !== "" ||
+      portfolioUrl.trim() !== "" ||
+      currentTitle.trim() !== "" ||
+      yearsExperience.trim() !== "" ||
+      skills.length > 0 ||
+      industries.length > 0 ||
+      workExperiences.some((e) => e.companyName.trim() !== "" || e.jobTitle.trim() !== "") ||
+      highestDegree.trim() !== "" ||
+      fieldOfStudy.trim() !== "" ||
+      institutionName.trim() !== "" ||
+      graduationYear.trim() !== "";
+
+    // Silently wiping a filled-in form is hostile — ask first.
+    if (hasContent) {
+      const confirmed = window.confirm(
+        "This will replace the details you have already entered with the ones from your resume. Your job preferences will be kept. Continue?",
+      );
+      if (!confirmed) return;
+    }
+
+    if (data.fullName) setFullName(data.fullName);
+    if (data.phone) setPhone(data.phone);
+    if (data.location) setLocation(data.location);
+    if (data.linkedinUrl != null) setLinkedinUrl(data.linkedinUrl);
+    if (data.portfolioUrl != null) setPortfolioUrl(data.portfolioUrl);
+
+    if (data.currentTitle) setCurrentTitle(data.currentTitle);
+    if (data.experienceLevel != null) setExperienceLevel(data.experienceLevel);
+    if (data.yearsExperience != null) {
+      setYearsExperience(String(data.yearsExperience));
+    }
+    if (data.skills?.length) setSkills(data.skills);
+    if (data.industries?.length) setIndustries(data.industries);
+
+    // Replaced wholesale rather than merged — merging produces duplicate roles,
+    // which is worse than a clean replace the user is about to review anyway.
+    if (data.workExperiences?.length) {
+      setWorkExperiences(
+        data.workExperiences.slice(0, 3).map((e) => ({
+          id: crypto.randomUUID(),
+          companyName: e.companyName ?? "",
+          jobTitle: e.jobTitle ?? "",
+          startDate: e.startDate ?? "",
+          endDate: e.endDate ?? "",
+          currentlyWorking: e.currentlyWorking ?? false,
+          keyResponsibilities: e.keyResponsibilities ?? "",
+        })),
+      );
+    }
+
+    if (data.highestDegree != null) setHighestDegree(data.highestDegree);
+    if (data.fieldOfStudy) setFieldOfStudy(data.fieldOfStudy);
+    if (data.institutionName) setInstitutionName(data.institutionName);
+    if (data.graduationYear) setGraduationYear(data.graduationYear);
+  }
+
   function addWorkExperience() {
     if (workExperiences.length < 3) {
       setWorkExperiences([...workExperiences, makeEmptyExperience()]);
@@ -171,6 +242,7 @@ export function ProfileForm({ initialData, userEmail }: Props) {
     <div className="flex flex-col gap-6">
       <ResumeSection
         onUploadComplete={setResumePdfUrl}
+        onExtracted={applyExtracted}
         existingUrl={initialData?.resume_pdf_url}
       />
 

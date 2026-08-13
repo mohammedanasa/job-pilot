@@ -246,6 +246,8 @@ Last updated: 2026-06-24
 **Pattern notes:**
 Drop zone switches border/bg on drag-over via `isDragging` state. File name replaces upload prompt text after selection. Select Resume uses secondary button; Generate Resume uses primary accent button aligned to the right.
 
+Extract from Resume (added 2026-08-13) renders only when `uploadState === "success"` — it acts on the stored file, so it cannot appear before one exists. It is a secondary button (`border border-border bg-surface`) to keep Generate Resume the single accent action in the card. Disabled state is `disabled:opacity-60 disabled:cursor-not-allowed`; the inline spinner reuses the drop zone's SVG at `14px` with the label switching to "Reading resume…". Its error text sits directly under the row in `text-sm font-medium text-error`, matching the upload error row.
+
 ### TagInput
 
 File: components/profile/TagInput.tsx

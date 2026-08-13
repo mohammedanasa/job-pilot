@@ -490,56 +490,124 @@ const response = await openai.chat.completions.create({
 - If browser research returns empty — still run synthesis with job + profile only
 - yourEdge, gapsToAddress, and smartQuestions are the most valuable fields — never skip them
 
-## OpenAI GPT-4o
+## AI Providers (Gemini + Groq)
 
-**Check first:** Check AGENTS.md for an installed OpenAI skill. The skill will have the latest API patterns and model capabilities.
+Replaced OpenAI GPT-4o as the project's AI layer (2026-08-13). All AI calls go through
+`lib/ai` — **never import a provider module directly from a route**, and never call a
+provider API from a route.
+
+```
+lib/ai/index.ts    ← the only thing routes import. Picks provider, handles fallback.
+lib/ai/types.ts    ← the provider-neutral contract
+lib/ai/gemini.ts   ← Google AI Studio adapter
+lib/ai/groq.ts     ← Groq adapter
+```
 
 ### Structured JSON Response
 
 ```typescript
-import OpenAI from "openai";
+import { generateJson } from "@/lib/ai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-
-const response = await openai.chat.completions.create({
-  model: "gpt-4o",
-  response_format: { type: "json_object" },
+const result = await generateJson<MyType>({
+  prompt: "Your prompt here",
+  schema: MY_JSON_SCHEMA, // JSON Schema object — constrains shape, not just format
+  schemaName: "my_type", // required by Groq's strict mode, ignored by Gemini
   temperature: 0.3,
-  messages: [
-    {
-      role: "system",
-      content: "You are a job matching assistant. Return only valid JSON.",
-    },
-    {
-      role: "user",
-      content: `Your prompt here`,
-    },
-  ],
+  maxOutputTokens: 4000,
 });
 
-const result = JSON.parse(response.choices[0].message.content!);
+if (!result.ok) {
+  // kind: "rate_limit" | "quota_exhausted" | "unavailable" | "bad_response" | "request_failed"
+  return NextResponse.json({ success: false, error: result.message }, { status: 502 });
+}
+
+result.data; // typed, already parsed
+result.provider; // which provider actually answered
 ```
+
+### Provider selection and fallback
+
+`AI_PROVIDER` in the environment picks the preferred provider (`groq` or `gemini`),
+defaulting to **groq** — its free tier allows ~1000 requests/day against Gemini's ~20
+per *minute*, which makes it the sensible primary.
+
+If the preferred provider returns a quota, availability, or network failure, the call
+falls through to the other one. A `bad_response` does **not** fail over: malformed JSON
+is a prompt or schema problem, and retrying elsewhere spends a second quota to get the
+same answer. Providers without an API key are skipped, so adding a key is the only step
+needed to bring one into rotation.
+
+**Schemas must stay provider-neutral.** Groq's strict mode requires
+`additionalProperties: false` and a `required` list naming every property; that
+adaptation happens inside `lib/ai/groq.ts`, not at the call site.
+
+### The Interactions API — things that will bite you
+
+The endpoint is `POST /v1beta/interactions`. The legacy
+`models/{model}:generateContent` endpoint still exists but is superseded.
+
+- **Auth header is `x-goog-api-key`** — not `Authorization: Bearer`. Third-party
+  guides get this wrong.
+- **There is no `output_text` field over raw REST.** That is an SDK convenience.
+  The text lives in `steps[]`.
+- **`steps[0]` is usually the `thought` step, not the answer.** Find the step with
+  `type: "model_output"`. Indexing `steps[0]` silently yields nothing.
+- **Thinking tokens draw from `max_output_tokens`.** Measured on a real resume: an
+  800-token cap was consumed by 767 thought tokens, leaving 18 for output and a
+  truncated, unparseable object. Budget 4000+ even for small replies.
+- **`status: "incomplete"` means the budget ran out mid-write.** Check it explicitly —
+  otherwise it surfaces as a confusing "malformed JSON" error.
+- **`thinking_level: "minimal"` for extraction-type work.** `"low"` truncated 1 run
+  in 5 and populated roughly half the fields. `"none"` is rejected; `"minimal"` is
+  the supported floor.
+- **Bound arrays with `maxItems` and list core fields in `required`.** Without
+  `maxItems` the model can pad until it exhausts the budget; without `required` it
+  omits fields that are plainly present.
+
+**Gemini model:** `gemini-3.5-flash` (`GEMINI_MODEL` in `lib/ai/gemini.ts`). Note
+`gemini-2.0-flash` is shut down. Verify a model is live with `GET /v1beta/models`
+before adopting it.
+
+**Groq model:** `openai/gpt-oss-20b` (`GROQ_MODEL` in `lib/ai/groq.ts`). Strict
+`json_schema` mode — which *guarantees* schema adherence rather than Gemini's
+best-effort — is supported **only** on `openai/gpt-oss-20b` and `openai/gpt-oss-120b`.
+Do not swap in a Llama or Qwen model without dropping to best-effort or json_object mode.
 
 **Temperature settings:**
 
 - `0.3` — matching, scoring, extraction, research synthesis — deterministic results
 - `0.7` — resume generation — natural variation
 
-**Max tokens:**
+**Free tier limits — the reason fallback exists:**
 
-- Job matching + scoring: `300`
-- Company research synthesis: `800`
-- Resume generation: `1000`
-- Profile extraction from resume: `800`
+- **Gemini:** ~20 requests/*minute* on `generate_content_free_tier_requests`. Trips
+  constantly during development. The 429 body carries a `Please retry in Ns` hint,
+  which the adapter surfaces in the user-facing message rather than guessing.
+- **Groq:** 30 RPM and ~1000 requests/day for `openai/gpt-oss-20b` — far more forgiving,
+  hence the default primary.
+
+Neither provider is retried in place: retrying into a spent quota burns what remains and
+holds the user's spinner open. The fallback tries the *other* provider instead.
 
 **Rules:**
 
-- Model string is always `'gpt-4o'` — never use other model names
-- Always use `response_format: { type: 'json_object' }` for structured data
-- Always parse `response.choices[0].message.content` as string — even with json_object it returns a string
-- Always validate parsed JSON before using — wrap in try/catch
+- Routes import from `@/lib/ai` only — never from `lib/ai/gemini` or `lib/ai/groq`
+- Model strings come from `GEMINI_MODEL` / `GROQ_MODEL` — never hardcode at a call site
+- `GEMINI_API_KEY`, `GROQ_API_KEY`, and `AI_PROVIDER` are server-only — never `NEXT_PUBLIC_`
+- Provider-specific tuning (Gemini's `thinking_level`, Groq's strict-schema adaptation)
+  stays inside its adapter — it must never leak into `GenerateJsonRequest`
+- Always handle the `ok: false` branch and surface `result.message` — a rate limit must
+  never be reported to the user as a bad file
+- Always validate parsed JSON before using — `generateJson` parses, it does not verify
+  your shape
 - Match threshold is always `MATCH_THRESHOLD` from `lib/utils.ts` — never hardcode 70
-- Company research synthesis must always return a complete dossier — never return empty even if browser research failed
+- Company research synthesis must always return a complete dossier — never return empty
+  even if browser research failed
+
+> Features 08, 10, and 13 were specified against GPT-4o. They use the unified
+> AI layer via `@/lib/ai` instead of a provider adapter. Feature 13's Stagehand
+> config still names an OpenAI model for browser automation — that is a separate
+> decision, to be made when Feature 13 is built.
 
 ---
 
@@ -662,28 +730,52 @@ Only use these — others are silently ignored:
 
 **Check first:** Check AGENTS.md for an installed pdf-parse skill.
 
-### Extract Text from Uploaded Resume
+### Extract Text from a Stored Resume
+
+**v2 is a class, not a function.** The `import pdf from "pdf-parse"` default-export
+form is v1 and fails at build time with "Export default doesn't exist in target module".
+
+**It must be excluded from the bundler.** pdf-parse wraps `pdfjs-dist`, which loads a
+separate worker file at runtime. Bundling rewrites the paths pdfjs uses to find that
+worker, and parsing fails at runtime — while `npm run build` still passes, because the
+module imports fine and only breaks when actually called. `next.config.ts` must keep:
 
 ```typescript
-import pdf from "pdf-parse";
+serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
+```
 
-// In API route handling resume upload
-export async function POST(req: NextRequest) {
-  const formData = await req.formData();
-  const file = formData.get("resume") as File;
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+Without it every parse throws `Setting up fake worker failed: "Cannot find module
+'.../pdf.worker.mjs'"`. Note `disableWorker` is *not* an option in this pdfjs version —
+externalizing is the fix.
 
-  const pdfData = await pdf(buffer);
-  const extractedText = pdfData.text; // raw text content
+The PDF is read back from InsForge Storage by `resume_pdf_key`, not from the request:
+by the time extraction runs, the file was uploaded in an earlier request and is no
+longer in the browser.
 
-  // Send to GPT-4o for structured extraction
+```typescript
+import { PDFParse } from "pdf-parse";
+
+const { data: blob } = await insforge.storage.from("resumes").download(key);
+
+const parser = new PDFParse({ data: new Uint8Array(await blob.arrayBuffer()) });
+try {
+  const parsed = await parser.getText();
+  const text = (parsed.text ?? "").trim();
+} finally {
+  await parser.destroy(); // releases the document
 }
 ```
 
 **Rules:**
 
 - Server-side only — never import in client components
-- `pdfData.text` is raw unformatted text — GPT-4o handles the structure extraction
+- `new PDFParse({ data })` takes a `Uint8Array`; always `destroy()` in a `finally`
+- `parsed.text` is raw unformatted text — the model handles structure extraction
 - Always handle parse errors — some PDFs are image-based and return empty text
-- If `pdfData.text` is empty or very short — return error to user: "Could not extract text from this PDF. Please try a different file."
+- If text is under ~200 characters — return "Could not extract text from this PDF.
+  Please try a different file." Check this **before** calling the model: a scanned PDF
+  sent to Gemini yields confidently invented fields, which is worse than a clean error
+- **Never report an infrastructure failure as a bad file.** A throw from `getText()` can
+  mean a broken PDF *or* a worker/environment failure. Blaming the user's file for our
+  problem sends them re-uploading good resumes forever. Distinguish the two and return
+  500 for our faults, 422 for theirs

@@ -7,8 +7,8 @@ Update this file after every completed feature. Any AI agent reading this should
 ## Current Status
 
 **Phase:** Phase 2 — Profile Page
-**Last completed:** 06 Profile Save Logic
-**Next:** 07 AI Profile Extraction from Resume
+**Last completed:** 07 AI Profile Extraction from Resume
+**Next:** 08 Resume PDF Generation from Profile
 
 ---
 
@@ -25,7 +25,7 @@ Update this file after every completed feature. Any AI agent reading this should
 
 - [x] 05 Profile Page — Full UI
 - [x] 06 Profile Save Logic
-- [ ] 07 AI Profile Extraction from Resume
+- [x] 07 AI Profile Extraction from Resume
 - [ ] 08 Resume PDF Generation from Profile
 
 ### Phase 3 — Find Jobs Page
@@ -68,6 +68,14 @@ Update this file after every completed feature. Any AI agent reading this should
 - 2026-08-13 — Resume upload is a Route Handler (`app/api/resume/upload/route.ts`), not the Server Action, because Server Actions are a poor fit for multipart file bodies. It persists `resume_pdf_url` and `resume_pdf_key` immediately on upload, independent of Save Profile, so a resume is never lost by navigating away without saving.
 - 2026-08-13 — The `resumes` bucket is private, so a stored URL is not fetchable. `resume_pdf_key` (migration `20260813104026`) holds the storage object key, and all reads go through `app/api/resume/download/route.ts`, which re-authenticates server-side and streams the PDF with `Cache-Control: private, no-store`.
 - 2026-08-13 — Completion percentage is computed twice against the same nine required fields: server-side in `app/profile/page.tsx` for the banner, and inside `saveProfile` for the `is_complete` flag. The two lists must stay in sync — if a required field is added, update both.
+- 2026-08-13 — **Gemini Flash replaces GPT-4o as the project's model.** Features 08, 10, and 13 were specified against GPT-4o and now use this client. Feature 13's Stagehand browser-automation model is a separate decision, deferred to that feature.
+- 2026-08-13 — **The AI layer is provider-neutral: `lib/gemini.ts` became `lib/ai/`** (`index.ts` orchestrator + `types.ts` contract + `gemini.ts` / `groq.ts` adapters). Routes import `@/lib/ai` only. Driven by a real outage: a single provider meant a spent free-tier quota took the whole feature down. `AI_PROVIDER` picks the primary (default `groq`, whose ~1000/day dwarfs Gemini's ~20/minute); quota, availability, and network failures fall through to the other provider. `bad_response` deliberately does *not* fail over — malformed JSON is a prompt/schema problem, so retrying elsewhere spends a second quota for the same answer.
+- 2026-08-13 — Groq uses **strict** `json_schema` mode (guaranteed adherence, better than Gemini's best-effort), which is supported only on `openai/gpt-oss-20b` / `120b`. Strict mode demands `additionalProperties: false` and a `required` list naming every property; that adaptation lives in `lib/ai/groq.ts` so shared schemas stay provider-neutral.
+- 2026-08-13 — Feature 07 extraction reads the PDF back from storage by `resume_pdf_key` rather than from the request — the file left the browser at upload time. pdf-parse produces text, and the model receives *text*, not the PDF. Sending a scanned PDF straight to the model yields invented fields; a text-length floor of 200 chars catches those before any AI call.
+- 2026-08-13 — Extraction fills only resume-derived fields. Job preferences (salary, remote, tone, titles sought) are intentions, not history, and are never overwritten. Work experience is replaced wholesale rather than merged — merging duplicates roles. A dirty form triggers a confirm before overwrite.
+- 2026-08-13 — `pdf-parse` and `pdfjs-dist` are listed in `serverExternalPackages` in `next.config.ts`. They must stay there: bundling breaks pdfjs's runtime worker resolution, and the failure appears only when the route is called, never at build time. Feature 08 also handles PDFs and depends on this.
+- 2026-08-13 — Extraction distinguishes *our* failures from *the user's*: a worker/environment error returns 500 with "problem on our side", while a genuinely unreadable PDF returns 422 with "try a different file". Reporting infrastructure faults as bad files sends users re-uploading good resumes.
+- 2026-08-13 — Gemini tuning is empirical, not guessed: `thinking_level: "minimal"` plus `maxItems` on arrays plus a `required` list. At `"low"` with no bounds, 1 run in 5 truncated and results populated ~half the fields. Thinking tokens are drawn from `max_output_tokens` and vary run to run, so budgets are generous (4000) and `status: "incomplete"` is checked explicitly.
 
 ---
 
@@ -82,3 +90,8 @@ Update this file after every completed feature. Any AI agent reading this should
 - 2026-06-22 — `npm run lint` and `npm run build` pass after adding profile page logout with SSR auth cookie clearing.
 - 2026-08-12 — `npm run lint` and `npm run build` pass after the Feature 04 schema rebuild. Signup trigger verified end to end: inserting an `auth.users` row auto-creates the matching `profiles` row, and deleting the user cascades it away.
 - 2026-08-13 — `npm run lint` and `npm run build` pass for Feature 06. Backend verified live: migration `20260813104026_add-resume-pdf-key` is applied (both `resume_pdf_url` and `resume_pdf_key` present on `profiles`), and the `resumes` bucket exists with `public: false`.
+- 2026-08-13 — ✅ **Feature 07 confirmed working by the developer in the browser** on a real resume — the full click-to-populate path (Extract button → route → pdf-parse → Groq → form fields), which no automated check covered.
+- 2026-08-13 — Feature 07's Gemini adapter (then `lib/gemini.ts`, now `lib/ai/gemini.ts`) verified against the live Gemini API with a generated test resume: extraction returns every field correctly — name, phone, location, LinkedIn, title, `experienceLevel` "Senior", 8 years, 9 skills, both roles with dates, `currentlyWorking` inferred from "Present", and degree mapped to the form's exact `Master's` enum value.
+- 2026-08-13 — ⚠️ That first verification ran under `tsx` (plain Node), **not** inside Next, and so did not exercise the route. It missed a bug that made the feature completely non-functional: pdfjs's worker does not resolve under Turbopack, so every extraction threw and was reported to the user as a bad PDF. Fixed with `serverExternalPackages` and then re-verified *inside the running Next dev server* (640 chars parsed from a real PDF). **Lesson: `npm run build` passing proves a module imports, not that it runs. Verify server code by calling it in the actual runtime.**
+- 2026-08-13 — Groq verified end to end **inside the Next dev server** (not just under `tsx`): pdf-parse → `lib/ai` → Groq returned a complete, correct extraction with `AI_PROVIDER` unset, confirming the groq-by-default path. Fallback verified in both directions — with `AI_PROVIDER=gemini` and Gemini either rate-limited or holding an invalid key, the request still succeeded via Groq. Strict-schema adaptation handled nested objects, arrays, and enums correctly on the first attempt.
+- 2026-08-13 — ⚠️ The Gemini free tier rate-limits aggressively: the cap is ~20 requests per **minute** (`generate_content_free_tier_requests`), and it trips constantly during development. Correction to an earlier note here: this was first recorded as a *daily* exhaustion, which was wrong — the 429 body reads `limit: 20 ... Please retry in Ns`. The adapter now parses that retry hint into the user-facing message instead of guessing. In practice the window can outlast the hint, which is exactly why the Groq fallback was added. Usage is visible at https://ai.dev/rate-limit.

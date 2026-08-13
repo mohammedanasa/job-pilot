@@ -1,15 +1,17 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { ExtractedProfile } from "@/types";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
 
 type Props = {
   onUploadComplete: (url: string | null) => void;
+  onExtracted: (data: ExtractedProfile) => void;
   existingUrl?: string | null;
 };
 
-export function ResumeSection({ onUploadComplete, existingUrl }: Props) {
+export function ResumeSection({ onUploadComplete, onExtracted, existingUrl }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(existingUrl ? "resume.pdf" : null);
@@ -18,6 +20,33 @@ export function ResumeSection({ onUploadComplete, existingUrl }: Props) {
   const [resumeUrl, setResumeUrl] = useState<string | null>(existingUrl ? "/api/resume/download" : null);
   const [uploadState, setUploadState] = useState<UploadState>(existingUrl ? "success" : "idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+
+  async function handleExtract() {
+    setExtracting(true);
+    setExtractError(null);
+
+    try {
+      const res = await fetch("/api/resume/extract", { method: "POST" });
+      const json = (await res.json()) as {
+        success: boolean;
+        data?: ExtractedProfile;
+        error?: string;
+      };
+
+      if (!json.success || !json.data) {
+        setExtractError(json.error ?? "Extraction failed. Please try again.");
+        return;
+      }
+
+      onExtracted(json.data);
+    } catch {
+      setExtractError("Something went wrong. Please try again.");
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   async function uploadFile(file: File) {
     setFileName(file.name);
@@ -194,6 +223,38 @@ export function ResumeSection({ onUploadComplete, existingUrl }: Props) {
           </button>
         )}
       </div>
+
+      {/* Extract from Resume — only once a resume is actually stored */}
+      {uploadState === "success" && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm font-medium leading-5 text-text-secondary">
+              Let AI read your resume and fill in the fields below.
+            </p>
+            <button
+              type="button"
+              onClick={handleExtract}
+              disabled={extracting}
+              className="flex shrink-0 items-center gap-2 rounded-md border border-border bg-surface px-4 py-2 text-sm font-medium leading-5 text-text-primary hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {extracting && (
+                <svg width="14" height="14" viewBox="0 0 32 32" fill="none" className="animate-spin">
+                  <circle cx="16" cy="16" r="13" stroke="var(--color-border)" strokeWidth="3" />
+                  <path
+                    d="M16 3C16 3 29 3 29 16"
+                    stroke="var(--color-accent)"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )}
+              {extracting ? "Reading resume…" : "Extract from Resume"}
+            </button>
+          </div>
+
+          {extractError && <span className="text-sm font-medium text-error">{extractError}</span>}
+        </div>
+      )}
 
       {/* Error row */}
       {uploadState === "error" && (

@@ -65,3 +65,39 @@ export type ProfileData = {
   created_at: string | null;
   updated_at: string | null;
 };
+
+/**
+ * What a resume can actually tell us.
+ *
+ * Deliberately narrower than ProfileFormData: job preferences (salary
+ * expectation, remote preference, cover letter tone, titles sought) are
+ * intentions, not history, so they never appear on a resume and are never
+ * touched by extraction.
+ *
+ * Every field is optional — a resume with no education section should leave
+ * the education fields alone rather than blanking them.
+ */
+export type ExtractedProfile = {
+  fullName?: string;
+  phone?: string;
+  location?: string;
+  linkedinUrl?: string;
+  portfolioUrl?: string;
+  currentTitle?: string;
+  experienceLevel?: string | null;
+  yearsExperience?: number | null;
+  skills?: string[];
+  industries?: string[];
+  workExperiences?: Array<{
+    companyName?: string;
+    jobTitle?: string;
+    startDate?: string;
+    endDate?: string;
+    currentlyWorking?: boolean;
+    keyResponsibilities?: string;
+  }>;
+  highestDegree?: string | null;
+  fieldOfStudy?: string;
+  institutionName?: string;
+  graduationYear?: string;
+};
