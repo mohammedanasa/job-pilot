@@ -199,7 +199,7 @@ URL saved to profiles table
 | ------------------- | ----------- | -------------------------------------------- |
 | id                  | uuid        | References auth.users                        |
 | full_name           | text        |                                              |
-| email               | text        | Pre-filled from auth                         |
+| email               | text        | Written by the signup trigger only — never by app code |
 | phone               | text        |                                              |
 | location            | text        | City, country                                |
 | current_title       | text        | Most recent job title                        |
@@ -218,9 +218,15 @@ URL saved to profiles table
 | portfolio_url       | text        |                                              |
 | work_authorization  | text        | citizen / permanent_resident / visa_required |
 | resume_pdf_url      | text        | InsForge Storage URL of current resume       |
+| resume_pdf_key      | text        | Storage object key — required for download from the private bucket |
 | is_complete         | boolean     | True when all required fields filled         |
 | created_at          | timestamptz |                                              |
 | updated_at          | timestamptz |                                              |
+
+A `profiles` row is created automatically for every new auth user by the
+`on_auth_user_created` trigger on `auth.users`. `agent_runs`, `jobs`, and
+`agent_logs` all reference `profiles(id)`, so this guarantees a user can own data
+before they ever open the profile form.
 
 ### `agent_runs`
 
@@ -283,7 +289,19 @@ URL saved to profiles table
 | ------- | ---------------------------- | ------------------------- |
 | resumes | resumes/{user_id}/resume.pdf | Current active resume PDF |
 
-Access: authenticated users only, own files only.
+Access: authenticated users only, own files only. The bucket is private — the app
+never links a storage URL directly and always proxies downloads through
+`app/api/resume/download/route.ts`, which re-authenticates server-side.
+
+---
+
+## Row Level Security
+
+All four tables have RLS enabled with a single own-rows-only policy scoped
+`TO authenticated`, using `(SELECT auth.uid())` subquery form so the function is
+evaluated once per query rather than per row. Policies are paired with explicit
+`GRANT`s — a policy decides which rows, a grant decides which operations. The
+`anon` role has all privileges revoked on every table.
 
 ---
 
