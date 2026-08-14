@@ -124,6 +124,44 @@ const { error } = await insforge
 
 ---
 
+### Filtering, Sorting, Pagination
+
+`insforge.database.from()` returns a raw `@supabase/postgrest-js` builder, so the
+whole PostgREST surface is available. Three things verified live against the
+project during Feature 11:
+
+```typescript
+const { data, error, count } = await insforge.database
+  .from("jobs")
+  .select("*", { count: "exact" }) // count is a sibling of data, ignores .range()
+  .eq("user_id", user.id)
+  .or(`company.ilike."%${term}%",title.ilike."%${term}%"`)
+  .order("match_score", { ascending: false, nullsFirst: false })
+  .range(0, 19); // 0-based, INCLUSIVE
+```
+
+**⚠️ `@insforge/sdk/SDK-REFERENCE.md` documents two methods that do not exist.**
+It lists `.offset(n)` and `.and(...)`; neither is in postgrest-js 1.21.4, and
+calling either throws `TypeError: … is not a function`. Use `.range(from, to)`
+for paging and chained filters for AND. Trust the `.d.ts` over that reference.
+
+**⚠️ `DESC` sorts NULLs FIRST.** postgrest-js emits no nulls directive unless you
+pass one, so Postgres' default applies and `.order(col, { ascending: false })`
+leads with NULL rows. Pass `nullsFirst: false`. There is no `nullsLast` option.
+
+**⚠️ `.or()` takes a raw filter string the SDK does not escape.** User input must
+be sanitized. Wrap the value in double quotes — that makes PostgREST's reserved
+`, . ( ) :` literal, so `Node.js` and `Smith, Inc` work. Unquoted, a term with a
+comma fails with `PGRST100 failed to parse logic tree`. Still strip the LIKE
+wildcards `%` and `_`, and escape `\` and `"`. See `sanitizeSearchTerm` in
+`lib/job-filters.ts`.
+
+`count: "exact"` is parsed from the `Content-Range` response header (verified:
+`content-range: 0-19/20`). Run counted queries **server-side** — from a browser
+they additionally need `Access-Control-Expose-Headers: Content-Range`.
+
+---
+
 ### Storage
 
 ```typescript

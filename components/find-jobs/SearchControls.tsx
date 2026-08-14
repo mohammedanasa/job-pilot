@@ -37,6 +37,12 @@ export function SearchControls() {
       }
 
       setResult(body.data);
+
+      // Fresh results should be visible. Staying on, say, High Match page 3
+      // would report "Found 10 jobs" over a table that did not change.
+      if (window.location.search) {
+        router.replace("/find-jobs", { scroll: false });
+      }
       router.refresh();
     } catch {
       setError("Could not reach the server. Please try again.");

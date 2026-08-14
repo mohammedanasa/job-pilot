@@ -99,6 +99,7 @@
 │   ├── browserbase.ts                     → Browserbase session creation + management
 │   ├── stagehand.ts                       → Stagehand initialisation with Browserbase session
 │   ├── adzuna.ts                          → Adzuna API client
+│   ├── job-filters.ts                     → Find Jobs URL ↔ query translation
 │   ├── posthog-client.ts                  → PostHog browser client
 │   ├── posthog-server.ts                  → PostHog server client
 │   └── utils.ts                           → Shared utility functions

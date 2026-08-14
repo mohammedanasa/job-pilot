@@ -124,6 +124,25 @@ export type GeneratedResumeProse = {
   }>;
 };
 
+export type MatchFilter = "all" | "high" | "low";
+
+export type SortOption = "score" | "newest" | "oldest";
+
+/**
+ * The Find Jobs list view, fully described by the URL.
+ *
+ * Every field has a default, so `/find-jobs` with no query string is a valid
+ * view rather than a special case. `page` is 1-indexed here because that is
+ * what the URL and the pagination UI show; the conversion to PostgREST's
+ * 0-indexed inclusive `.range()` happens once, in the page query.
+ */
+export type JobFilters = {
+  match: MatchFilter;
+  sort: SortOption;
+  q: string;
+  page: number;
+};
+
 export type JobRow = {
   id: string;
   run_id: string | null;

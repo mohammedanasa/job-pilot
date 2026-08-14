@@ -1,4 +1,5 @@
-import { Building2, Search } from "lucide-react";
+import Link from "next/link";
+import { Building2, Search, SlidersHorizontal } from "lucide-react";
 import { MatchScoreBar } from "@/components/find-jobs/MatchScoreBar";
 import { SourceBadge } from "@/components/find-jobs/SourceBadge";
 import { formatRelativeDate } from "@/lib/utils";
@@ -6,11 +7,25 @@ import type { JobRow } from "@/types";
 
 type Props = {
   jobs: JobRow[];
+  isFiltered: boolean;
 };
 
-export function JobsTable({ jobs }: Props) {
+export function JobsTable({ jobs, isFiltered }: Props) {
+  // Two different emptinesses: nothing found yet, versus nothing matching the
+  // current filters. Telling a user with 40 saved jobs to "run a search" because
+  // they mistyped a company name sends them somewhere that will not help.
   if (jobs.length === 0) {
-    return (
+    return isFiltered ? (
+      <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
+        <SlidersHorizontal size={20} className="text-text-muted" />
+        <p className="text-sm font-medium leading-5 text-text-muted">
+          No jobs match these filters.
+        </p>
+        <Link href="/find-jobs" className="text-sm font-semibold text-accent hover:underline">
+          Clear filters
+        </Link>
+      </div>
+    ) : (
       <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
         <Search size={20} className="text-text-muted" />
         <p className="text-sm font-medium leading-5 text-text-muted">

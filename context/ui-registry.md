@@ -358,3 +358,24 @@ No new visual patterns — reuses Feature 09's card/table/badge classes exactly.
 
 **Pattern notes:**
 This feature is data/logic-only by design once the two components above changed — no new component files were created for the find-jobs UI itself. See progress-tracker.md's 2026-08-14 Feature 10 entry for the underlying architecture (batched AI scoring, dedup, profile gate).
+
+### Feature 11 — Filter + Sort + Pagination
+
+Files: app/find-jobs/page.tsx, components/find-jobs/JobsFilterBar.tsx, components/find-jobs/Pagination.tsx, components/find-jobs/JobsTable.tsx, components/find-jobs/SearchControls.tsx, lib/job-filters.ts
+
+Last updated: 2026-08-14
+
+No new visual tokens — every class from Feature 09 is preserved exactly. What changed is that the controls now do something. Three additions worth matching elsewhere:
+
+| Addition | Class |
+| --- | --- |
+| Clickable pagination page / Prev / Next | existing `pageButtonClass` + `hover:bg-surface-secondary` |
+| Disabled Prev / Next at the bounds | existing `pageButtonClass` + `text-text-muted`, rendered as `<span>` not `<Link>` |
+| Clear filters link (filtered empty state) | `text-sm font-semibold text-accent hover:underline` |
+
+**Pattern notes:**
+`JobsFilterBar` became `"use client"` — selects call `router.push`, the text input debounces 300 ms into `router.replace` so a burst of typing leaves one history entry rather than eight. It takes `match`/`sort`/`q` as **props** and deliberately does **not** call `useSearchParams()`: in Next 16 that requires a `Suspense` boundary or the production build fails while dev passes. Any control change resets `page` to 1.
+
+`Pagination` stayed a Server Component and now renders `<Link>`s (prefetching, middle-click, no JS). It returns `null` at zero results — the table's empty state speaks for the section instead — and hides the page-number strip when there is only one page, so the "Showing X to Y of Z" line stands alone. The strip collapses to first / current±1 / last beyond 7 pages, preserving the `1 2 3 … 8` shape of the Feature 09 mock. The active page reuses `border-accent bg-accent-light text-accent` and carries `aria-current="page"`.
+
+`JobsTable` now takes `isFiltered` and has **two** empty states, per `ui-rules.md`'s empty-state rule: `Search` icon + "No jobs yet…" when the user has nothing at all, and `SlidersHorizontal` + "No jobs match these filters." + a Clear filters link when a filter is active. Same centered `px-4 py-16` layout for both.
