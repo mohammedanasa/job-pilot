@@ -230,7 +230,7 @@ Donut ring is inline SVG — radius 36, circumference-based dashoffset for perce
 ### ResumeSection
 
 File: components/profile/ResumeSection.tsx
-Last updated: 2026-06-24
+Last updated: 2026-08-13
 
 | Property         | Class                                                                              |
 | ---------------- | ---------------------------------------------------------------------------------- |
@@ -247,6 +247,8 @@ Last updated: 2026-06-24
 Drop zone switches border/bg on drag-over via `isDragging` state. File name replaces upload prompt text after selection. Select Resume uses secondary button; Generate Resume uses primary accent button aligned to the right.
 
 Extract from Resume (added 2026-08-13) renders only when `uploadState === "success"` — it acts on the stored file, so it cannot appear before one exists. It is a secondary button (`border border-border bg-surface`) to keep Generate Resume the single accent action in the card. Disabled state is `disabled:opacity-60 disabled:cursor-not-allowed`; the inline spinner reuses the drop zone's SVG at `14px` with the label switching to "Reading resume…". Its error text sits directly under the row in `text-sm font-medium text-error`, matching the upload error row.
+
+Generate Resume from Profile (wired 2026-08-13) keeps its accent styling as the card's single primary action, and now follows the same three-part row pattern as Extract: label on the left, button right, error text beneath in `text-sm font-medium text-error`. Its spinner is the same 14px SVG but strokes `--color-accent-light` / `--color-accent-foreground` rather than `--color-border` / `--color-accent`, because it spins on an accent-filled button where the secondary spinner's colours would be invisible. Two disabled sources share one style (`disabled:opacity-60 disabled:cursor-not-allowed`): in-flight generation, and an unsaved form — the latter also swaps the left-hand label to "Save your profile first…" and sets a `title` tooltip, so a disabled button always states its own reason. On success a "View generated resume" link renders below in `text-sm font-semibold text-accent hover:underline`, pointing at `/api/resume/download?type=generated` — never a storage URL, since the bucket is private. It sits apart from the uploaded resume's "View current resume" link so the two documents stay visibly distinct.
 
 ### TagInput
 

@@ -61,6 +61,8 @@ export type ProfileData = {
   work_authorization: string | null;
   resume_pdf_url: string | null;
   resume_pdf_key: string | null;
+  generated_pdf_url: string | null;
+  generated_pdf_key: string | null;
   is_complete: boolean | null;
   created_at: string | null;
   updated_at: string | null;
@@ -100,4 +102,24 @@ export type ExtractedProfile = {
   fieldOfStudy?: string;
   institutionName?: string;
   graduationYear?: string;
+};
+
+/**
+ * The only part of a generated resume a model is allowed to write.
+ *
+ * Everything else on the page — names, dates, employers, skills, education,
+ * contact details — is copied verbatim from the profile. A model that rephrases
+ * a job title or nudges a date produces a resume that quietly contradicts the
+ * user's own record of their career.
+ *
+ * Roles are matched back to work_experience by `index` rather than by company
+ * name: two stints at the same employer are common, and a model echoing a name
+ * back with different punctuation would silently fail to match.
+ */
+export type GeneratedResumeProse = {
+  summary: string;
+  roles: Array<{
+    index: number;
+    bullets: string[];
+  }>;
 };

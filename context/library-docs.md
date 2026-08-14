@@ -608,6 +608,10 @@ holds the user's spinner open. The fallback tries the *other* provider instead.
 > AI layer via `@/lib/ai` instead of a provider adapter. Feature 13's Stagehand
 > config still names an OpenAI model for browser automation — that is a separate
 > decision, to be made when Feature 13 is built.
+>
+> Feature 08 is built and does this: `app/api/resume/generate/route.ts` calls
+> `generateJson` at temperature 0.7 (generation) against extraction's 0.3
+> (reading). Features 10 and 13 remain to be wired.
 
 ---
 
@@ -703,14 +707,34 @@ const ResumePDF = ({ profile }: { profile: Profile }) => (
 // Generate buffer
 const buffer = await renderToBuffer(<ResumePDF profile={profile} />)
 
-// Upload directly to InsForge Storage
+// Upload directly to InsForge Storage.
+// NOTE: upload() takes exactly two arguments in the installed SDK — there is no
+// options object and no upsert flag. It takes a File/Blob, not a raw Buffer.
+// Writing an existing key overwrites it silently (verified against the live bucket).
 await insforge.storage
   .from('resumes')
-  .upload(`${userId}/resume.pdf`, buffer, {
-    contentType: 'application/pdf',
-    upsert: true
-  })
+  .upload(
+    `${userId}/generated-resume.pdf`,
+    new File([new Uint8Array(buffer)], 'generated-resume.pdf', { type: 'application/pdf' }),
+  )
 ```
+
+**Verified against the installed version (4.6.0), correcting the notes below:**
+
+- `backgroundColor`, `flex`, `paddingVertical`/`paddingHorizontal`, and `borderRadius`
+  all render correctly. The "supported CSS properties" list below is narrower than
+  what actually works — treat it as a safe subset, not an exhaustive one.
+- No `serverExternalPackages` entry is required. Unlike `pdf-parse`, this package
+  resolves cleanly under Turbopack — verified by calling `renderToBuffer` inside
+  the running dev server.
+- CSS custom properties (`var(--color-*)`) do **not** work: the PDF layout engine
+  has no CSS variable system, so colours must be literal hex. `lib/resume-pdf.tsx`
+  holds the palette copied from `ui-tokens.md` — the one sanctioned exception to
+  the no-hardcoded-colour rule.
+- Export a builder function that returns the element, not the component itself.
+  `createElement()` infers the element type from props and loses the `DocumentProps`
+  shape `renderToBuffer` requires; a JSX literal inside a route's try/catch trips
+  the `react-hooks/error-boundaries` lint rule. See `lib/resume-pdf.tsx`.
 
 **Supported CSS properties:**
 Only use these — others are silently ignored:

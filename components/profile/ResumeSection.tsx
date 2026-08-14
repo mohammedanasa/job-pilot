@@ -9,9 +9,19 @@ type Props = {
   onUploadComplete: (url: string | null) => void;
   onExtracted: (data: ExtractedProfile) => void;
   existingUrl?: string | null;
+  existingGeneratedUrl?: string | null;
+  /** True when the form holds resume-relevant edits that are not yet saved.
+   *  Generation reads the database, so it would miss them. */
+  isDirty: boolean;
 };
 
-export function ResumeSection({ onUploadComplete, onExtracted, existingUrl }: Props) {
+export function ResumeSection({
+  onUploadComplete,
+  onExtracted,
+  existingUrl,
+  existingGeneratedUrl,
+  isDirty,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(existingUrl ? "resume.pdf" : null);
@@ -22,6 +32,34 @@ export function ResumeSection({ onUploadComplete, onExtracted, existingUrl }: Pr
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  // Same reasoning as the uploaded resume: the bucket is private, so the link
+  // points at the download proxy rather than the storage URL.
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(
+    existingGeneratedUrl ? "/api/resume/download?type=generated" : null,
+  );
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setGenerateError(null);
+
+    try {
+      const res = await fetch("/api/resume/generate", { method: "POST" });
+      const json = (await res.json()) as { success: boolean; url?: string; error?: string };
+
+      if (!json.success) {
+        setGenerateError(json.error ?? "Could not generate a resume. Please try again.");
+        return;
+      }
+
+      setGeneratedUrl("/api/resume/download?type=generated");
+    } catch {
+      setGenerateError("Something went wrong. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   async function handleExtract() {
     setExtracting(true);
@@ -270,16 +308,47 @@ export function ResumeSection({ onUploadComplete, onExtracted, existingUrl }: Pr
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium leading-5 text-text-secondary">
-          Need a fresh document based on the info fields below?
-        </p>
-        <button
-          type="button"
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium leading-5 text-accent-foreground hover:opacity-90"
-        >
-          Generate Resume from Profile
-        </button>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm font-medium leading-5 text-text-secondary">
+            {isDirty
+              ? "Save your profile first — the resume is built from your saved details."
+              : "Need a fresh document based on the info fields below?"}
+          </p>
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={generating || isDirty}
+            title={isDirty ? "Save your profile to generate an up-to-date resume" : undefined}
+            className="flex shrink-0 items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium leading-5 text-accent-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {generating && (
+              <svg width="14" height="14" viewBox="0 0 32 32" fill="none" className="animate-spin">
+                <circle cx="16" cy="16" r="13" stroke="var(--color-accent-light)" strokeWidth="3" />
+                <path
+                  d="M16 3C16 3 29 3 29 16"
+                  stroke="var(--color-accent-foreground)"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                />
+              </svg>
+            )}
+            {generating ? "Generating…" : "Generate Resume from Profile"}
+          </button>
+        </div>
+
+        {generateError && <span className="text-sm font-medium text-error">{generateError}</span>}
+
+        {generatedUrl && !generating && (
+          <a
+            href={generatedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-semibold leading-5 text-accent hover:underline"
+          >
+            View generated resume
+          </a>
+        )}
       </div>
     </div>
   );

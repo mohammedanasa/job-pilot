@@ -106,6 +106,43 @@ export function ProfileForm({ initialData, userEmail }: Props) {
   const [saveResult, setSaveResult] = useState<{ success: boolean; error?: string } | null>(null);
 
   /**
+   * Fingerprint of everything the generated resume draws on.
+   *
+   * Generation reads the database, not this form, so unsaved edits would be
+   * silently absent from the PDF. Comparing against the last-saved snapshot lets
+   * the Generate button say "save first" instead of quietly producing a stale
+   * document. Preferences are excluded — they never reach the resume, so editing
+   * one should not block generation.
+   */
+  const resumeFingerprint = JSON.stringify([
+    fullName,
+    phone,
+    location,
+    linkedinUrl,
+    portfolioUrl,
+    currentTitle,
+    experienceLevel,
+    yearsExperience,
+    skills,
+    industries,
+    workExperiences.map((e) => [
+      e.companyName,
+      e.jobTitle,
+      e.startDate,
+      e.endDate,
+      e.currentlyWorking,
+      e.keyResponsibilities,
+    ]),
+    highestDegree,
+    fieldOfStudy,
+    institutionName,
+    graduationYear,
+  ]);
+
+  const [savedFingerprint, setSavedFingerprint] = useState(resumeFingerprint);
+  const isDirty = resumeFingerprint !== savedFingerprint;
+
+  /**
    * Apply AI-extracted resume data to the form.
    *
    * Only resume-derived fields are touched — job preferences are intentions,
@@ -224,6 +261,9 @@ export function ProfileForm({ initialData, userEmail }: Props) {
       });
 
       setSaveResult(result);
+
+      // The database now matches the form, so generation has fresh data to read.
+      if (result.success) setSavedFingerprint(resumeFingerprint);
     } catch {
       setSaveResult({ success: false, error: "Something went wrong. Please try again." });
     } finally {
@@ -244,6 +284,8 @@ export function ProfileForm({ initialData, userEmail }: Props) {
         onUploadComplete={setResumePdfUrl}
         onExtracted={applyExtracted}
         existingUrl={initialData?.resume_pdf_url}
+        existingGeneratedUrl={initialData?.generated_pdf_url}
+        isDirty={isDirty}
       />
 
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
