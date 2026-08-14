@@ -6,9 +6,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Phase 3 — Find Jobs Page
-**Last completed:** 11 Filter + Sort + Pagination
-**Next:** 12 Job Details Page — Full UI
+**Phase:** Phase 4 — Job Details Page
+**Last completed:** 12 Job Details Page — Full UI
+**Next:** 13 Company Research Agent
 
 ---
 
@@ -36,7 +36,7 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ### Phase 4 — Job Details Page
 
-- [ ] 12 Job Details Page — Full UI
+- [x] 12 Job Details Page — Full UI
 - [ ] 13 Company Research Agent
 
 ### Phase 5 — Dashboard
@@ -111,6 +111,17 @@ Update this file after every completed feature. Any AI agent reading this should
   - **`Pagination` stays a Server Component** rendering `<Link>`s — no client JS, gets prefetching, supports middle-click. Next's own guidance is `<Link>` over `router.push` absent a specific reason.
   - `build-plan.md`'s 20-per-page kept as specified.
 
+- 2026-08-14 — Feature 12 (Job Details Page — Full UI) built via `/architect`:
+  - **The Find Jobs table row is now clickable** — `project-overview.md` specified "Click job row → opens job details page" but Feature 09 never wired it. Implemented as a stretched link (`after:absolute after:inset-0` on the company-cell `<Link>`, `relative` on the `<tr>`) rather than wrapping the row in an anchor, which is invalid HTML. `JobsTable` stays a Server Component.
+  - **Header match badge is High/Low at `MATCH_THRESHOLD` (70), not the table's 90/80/below tiers.** The delivered design shows an 85% score as a green pill, which only the threshold rule reproduces — `MatchScoreBar`'s three-tier gradient would render it blue. Two different components now intentionally use two different color rules for match score, both already defined in `ui-tokens.md`'s Status Badges vs Match Score Colors rows.
+  - **Only one Job Description card ships — no Responsibilities/Requirements/Nice to Have/Benefits/About Company sections**, despite `project-overview.md` listing all five. Those five `jobs` columns are null on every row sourced from Adzuna search (see Feature 10's note) and the delivered `job-details.png` design shows none of them. Building five permanently-empty sections would be untestable dead UI; they stay in the schema for a possible future structured-extraction feature.
+  - **Gap skills render in accent purple (`bg-accent-muted`/`text-accent`), not red/orange.** The build plan said "red/orange badges," but both `ui-tokens.md`'s existing Skills Badges table and the delivered design use accent purple for missing skills. Corrected the build-plan line rather than following it.
+  - **Research Company button is inert (`disabled`) in this feature.** `app/api/agent/research/route.ts` already exists as a Feature 13 stub that fires the real `company_researched` PostHog event with a `TODO` in place of actual research. Wiring the button now would write false events into the exact data Feature 17's Company Research Activity chart reads later. `CompanyResearch.tsx` always renders the empty state — it does not yet branch on `job.company_research`.
+  - New components under `components/job-details/` follow `architecture.md`'s planned folder exactly: `JobInfo.tsx` (header card + 4-card info row), `MatchScore.tsx` (AI reasoning + skills comparison, returns `null` if both are absent), `JobDescription.tsx`, `CompanyResearch.tsx`, `JobActions.tsx` (Apply Now, returns `null` if no apply URL exists).
+  - `app/find-jobs/[id]/page.tsx` queries `jobs` by `id` **and** `user_id` in the same `.eq()` chain (not id alone, then checking ownership after) — a request for another user's job id returns no row and hits `notFound()`, rather than ever materializing another user's data.
+
+- 2026-08-14 — **`/review` fix on Feature 12**: developer reported a job description cut off mid-sentence ending in `…`. Traced end to end — `agent/adzuna.ts` writes `job.description` verbatim (no truncation on our side) and `JobDescription.tsx` rendered it in full with no `.slice()` or `line-clamp`. Called the live Adzuna search API directly with the same query from the report and confirmed **Adzuna's own API caps `description` at exactly 500 characters**, trailing it with `…` server-side — 5/5 sampled results were exactly 500 chars, one matching the reported posting verbatim. This corrects the `~200-char` figure recorded in Feature 10's decision note above — the real cap is 500. There is no more text to recover client-side; `external_apply_url` (Adzuna's redirect to the real posting) is the only place it exists. Fix: `JobDescription.tsx` now takes `applyUrl` and renders a "Read the full description on the original posting →" link whenever `aboutRole.length >= 500`, linking to `external_apply_url`. No change to Feature 10's write path — `about_role` still stores Adzuna's response as-is.
+
 ---
 
 ## Notes
@@ -139,3 +150,4 @@ Update this file after every completed feature. Any AI agent reading this should
 - 2026-08-14 — Feature 11's two genuinely-unproven query behaviours were probed live against the project before being called done, per the Feature 07/10 lesson. **The `.or()` quoting is confirmed by a discriminating test, not an assumption:** PostgREST parses the filter tree *before* checking permissions, so an unauthenticated probe still distinguishes syntax from auth. The unquoted form `company.ilike.%Smith, Inc%,…` returned `400 PGRST100 "failed to parse logic tree"`, while the quoted form returned `401 42501 permission denied` for all five test terms — `acme`, `Node.js`, `Smith, Inc`, `a(b)c`, `with space` — proving each parsed successfully. **`count: "exact"` confirmed** against the live REST endpoint: `content-range: 0-19/20`, i.e. the post-slash total is present and ignores `limit`, and `match_score.desc.nullslast,found_at.desc` ordered correctly. Probe script deleted after the run.
 - 2026-08-14 — ⚠️ **Not yet verified in the browser, and pagination cannot be verified with current data.** The account holds exactly 20 jobs — precisely `PAGE_SIZE` — so the page-number strip is hidden (one page) and no second page exists. At least one more search returning a non-duplicate job is needed before pagination has ever rendered. Current distribution is 7 high / 13 low / 0 unscored, so High and Low are testable now but the NULL-score path has no data to exercise it.
 - 2026-08-14 — **Bug found in the developer's own browser testing, fixed via `/recover` (Failure Mode 1)**: `agent/matcher.ts`'s scoring prompt had no input or output bound. My 2-job toy-example verification during the build didn't surface it — real Adzuna descriptions plus a full `work_experience` JSON dump across up to 10 jobs was large enough to trip Groq's request limit outright (`HTTP 400`) on one run, and on another exhausted the fixed 4000-token reply budget mid-batch (`response truncated`), surfacing to the user as "The AI response was cut short." Fixed by: capping each job description at 600 chars before prompting (`MAX_DESCRIPTION_LENGTH`), narrowing `work_experience` in the prompt to a short "title at company" list instead of the full JSON blob, tightening `matchReason` to 1-2 sentences (≤200 chars, was "one paragraph" ≤400) and `matchedSkills`/`missingSkills` to 8 items (was 15), and raising `maxOutputTokens` from 4000 to 6000. Re-verified live against Groq with 10 real, untruncated Adzuna job descriptions (real-world lengths, not the toy example) — `finish_reason: "stop"`, all 10 scores returned correctly indexed. **Lesson: a toy-example verification (2 short jobs) proved the schema shape works, but not that it survives at real data volume — the two are different claims, and only the second one is the one that matters in production.**
+- 2026-08-14 — `npm run lint` and `npm run build` pass for Feature 12. `/find-jobs/[id]` builds as `ƒ` (dynamic). Verified inside the running dev server per the Feature 07 lesson: an unauthenticated request to `/find-jobs/00000000-0000-0000-0000-000000000000` 307-redirects to `/login?next=%2Ffind-jobs%2F...`, confirming the route is registered and protected identically to every other authenticated page. The exact `.eq("id", …).eq("user_id", …).single()` query shape was probed directly against the live InsForge REST endpoint (`/api/database/records/jobs` with `Accept: application/vnd.pgrst.object+json`) — PostgREST parsed the filter and returned `401` (auth boundary), not a parse error, confirming the query syntax is valid. Full click-through with a real job and a logged-in session was not possible — no OAuth automation available, the same gap every prior Find Jobs feature has noted.

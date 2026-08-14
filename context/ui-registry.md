@@ -379,3 +379,33 @@ No new visual tokens — every class from Feature 09 is preserved exactly. What 
 `Pagination` stayed a Server Component and now renders `<Link>`s (prefetching, middle-click, no JS). It returns `null` at zero results — the table's empty state speaks for the section instead — and hides the page-number strip when there is only one page, so the "Showing X to Y of Z" line stands alone. The strip collapses to first / current±1 / last beyond 7 pages, preserving the `1 2 3 … 8` shape of the Feature 09 mock. The active page reuses `border-accent bg-accent-light text-accent` and carries `aria-current="page"`.
 
 `JobsTable` now takes `isFiltered` and has **two** empty states, per `ui-rules.md`'s empty-state rule: `Search` icon + "No jobs yet…" when the user has nothing at all, and `SlidersHorizontal` + "No jobs match these filters." + a Clear filters link when a filter is active. Same centered `px-4 py-16` layout for both.
+
+### Feature 12 — Job Details Page (Full UI)
+
+Files: app/find-jobs/[id]/page.tsx, components/job-details/JobInfo.tsx, components/job-details/MatchScore.tsx, components/job-details/JobDescription.tsx, components/job-details/CompanyResearch.tsx, components/job-details/JobActions.tsx, components/find-jobs/JobsTable.tsx
+
+Last updated: 2026-08-14
+
+| Property         | Class                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| Background       | `bg-surface` cards                                                                  |
+| Border           | `border border-border` cards, `border-t border-border` divider inside Company Research |
+| Border radius    | `rounded-2xl` cards, `rounded-md` buttons/links, `rounded-full` badges, `rounded-xl`/`rounded-lg` icon tiles |
+| Text — primary   | `text-sm font-medium leading-6 text-text-primary` body, `text-xl font-semibold leading-7 text-text-primary` job title |
+| Text — secondary | `text-xs font-medium uppercase tracking-wide text-text-secondary` section labels    |
+| Spacing          | `p-6` cards, `gap-4` info card row, `gap-6` page sections                          |
+| Shadow           | `shadow-sm`                                                                         |
+| Accent usage     | Gap skills pills `bg-accent-muted text-accent`; Apply Now button `bg-accent text-accent-foreground`; Research Company button `bg-accent text-accent-foreground` (disabled) |
+
+**Pattern notes:**
+All Server Components, no `"use client"` anywhere in this feature — the page fetches once and every child is presentational. `JobInfo.tsx` renders the header card (logo tile, title, company, match badge, View Job Post) plus a 4-card info row (`Salary Est.` / `Location` / `Job Type` / `Date Found`) using a small local `InfoCard` with a tinted icon tile per field (`bg-success-lightest`/`bg-info-lightest`/`bg-accent-muted`/`bg-surface-secondary`). The header match badge is a **status** badge — High/Low at `MATCH_THRESHOLD` (`bg-success-lightest`/`text-success-foreground` vs `bg-surface-secondary`/`text-text-secondary`) — deliberately different from `MatchScoreBar`'s 90/80/below gradient tiers, because the delivered design's 85% pill is green and only the threshold rule reproduces that.
+
+`MatchScore.tsx` splits AI Match Reasoning and Required Skills vs Your Profile into two cards, each conditionally rendered (returns `null` from the whole component if there's nothing to show — an unscored job renders neither). Matched skills use `bg-success-lightest`/`text-success-foreground` with a literal `✓`; gap skills use `bg-accent-muted`/`text-accent` with a literal `×` — **not** red/orange, correcting `build-plan.md`'s wording to match both `ui-tokens.md`'s existing Skills Badges table and the delivered design pixel-for-pixel.
+
+`JobDescription.tsx` renders only `about_role` — no Responsibilities/Requirements/Nice to Have/Benefits/About Company sections, since those five `jobs` columns are null on every Adzuna-sourced row and the delivered design shows a single description card.
+
+`JobDescription.tsx` also takes `applyUrl` (Feature 12 `/review` fix, 2026-08-14): Adzuna's search API caps `description` at exactly 500 characters server-side, trailing it with its own `…` — confirmed live against multiple listings, not a truncation this codebase performs. There is no more text to recover client-side, so a description whose length is `>= 500` renders a `text-sm font-semibold text-accent hover:underline` link — "Read the full description on the original posting →" — to `external_apply_url`, the same Adzuna redirect already used by View Job Post and Apply Now.
+
+`CompanyResearch.tsx` always renders the "No research yet" empty state in this feature; the Research Company button is `disabled` (not merely unwired) so its non-functional state is self-evident, since Feature 13 owns making it work. `JobActions.tsx` is the full-width Apply Now bar at the bottom of the page, outside any card, matching the design.
+
+The Find Jobs table gained navigation: `JobsTable.tsx`'s company cell is now a `<Link href={\`/find-jobs/${job.id}\`}>` with `after:absolute after:inset-0` on a `relative` `<tr>`, stretching the click target to the full row without wrapping the `<tr>` itself in an anchor (invalid HTML). No new classes — reuses the existing hover/border row treatment.

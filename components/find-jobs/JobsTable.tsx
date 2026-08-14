@@ -61,15 +61,21 @@ export function JobsTable({ jobs, isFiltered }: Props) {
       </thead>
       <tbody>
         {jobs.map((job) => (
-          <tr key={job.id} className="border-b border-border last:border-b-0 hover:bg-surface-secondary">
+          <tr
+            key={job.id}
+            className="relative border-b border-border last:border-b-0 hover:bg-surface-secondary"
+          >
             <td className="px-4 py-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-secondary text-text-secondary">
                   <Building2 size={16} />
                 </span>
-                <span className="text-sm font-medium leading-5 text-text-primary">
+                <Link
+                  href={`/find-jobs/${job.id}`}
+                  className="text-sm font-medium leading-5 text-text-primary after:absolute after:inset-0"
+                >
                   {job.company}
-                </span>
+                </Link>
               </div>
             </td>
             <td className="px-4 py-4 text-sm font-medium leading-5 text-text-primary">

@@ -232,7 +232,7 @@ Build the complete job details page UI. Job data from DB is already available fr
 - Job header — company logo placeholder, job title, company name, match score badge with percentage, View Job Post button (links to redirect_url)
 - Info cards row — Salary Est., Location, Job Type, Date Found
 - AI Match Reasoning section — match reason paragraph from GPT-4o
-- Required Skills vs Your Profile — matched skills as green badges, missing skills as red/orange badges
+- Required Skills vs Your Profile — matched skills as green badges, missing skills as accent purple badges (`bg-accent-muted`/`text-accent` per ui-tokens.md and the delivered design — corrected from "red/orange" during Feature 12)
 - Job Description section — description content from Adzuna
 - Company Research card — empty state with Research Company button. After research: structured dossier with company overview, tech stack, culture, why this role, interview prep
 - Apply Now button (links to redirect_url, opens in new tab)
