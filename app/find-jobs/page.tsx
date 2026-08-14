@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
+import { AppNavbar } from "@/components/layout/AppNavbar";
+import { JobsFilterBar } from "@/components/find-jobs/JobsFilterBar";
+import { JobsTable } from "@/components/find-jobs/JobsTable";
+import { Pagination } from "@/components/find-jobs/Pagination";
+import { SearchControls } from "@/components/find-jobs/SearchControls";
 import { createInsforgeServer } from "@/lib/insforge-server";
+import { MOCK_JOBS } from "@/lib/mock-jobs";
 import type { ReactElement } from "react";
 
 export default async function FindJobsPage(): Promise<ReactElement> {
@@ -13,16 +18,16 @@ export default async function FindJobsPage(): Promise<ReactElement> {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
-      <main className="mx-auto max-w-[1268px] px-6 py-8">
-        <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
-          <p className="text-xs font-normal uppercase leading-4 text-text-muted">Find Jobs</p>
-          <h1 className="mt-2 text-base font-semibold leading-6 text-text-primary">
-            Search for jobs
-          </h1>
-          <p className="mt-2 text-sm font-medium leading-6 text-text-secondary">
-            Your saved matches will appear here after your first search.
-          </p>
+      <AppNavbar />
+      <main className="mx-auto flex max-w-[1268px] flex-col gap-6 px-6 py-8">
+        <SearchControls />
+
+        <section className="rounded-2xl border border-border bg-surface shadow-sm">
+          <JobsFilterBar />
+          <div className="overflow-x-auto">
+            <JobsTable jobs={MOCK_JOBS} />
+          </div>
+          <Pagination />
         </section>
       </main>
     </div>

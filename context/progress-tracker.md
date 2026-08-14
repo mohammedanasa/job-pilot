@@ -6,9 +6,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Phase 2 — Profile Page
-**Last completed:** 08 Resume PDF Generation from Profile
-**Next:** 09 Find Jobs Page — Full UI
+**Phase:** Phase 3 — Find Jobs Page
+**Last completed:** 09 Find Jobs Page — Full UI
+**Next:** 10 Adzuna Job Discovery
 
 ---
 
@@ -30,7 +30,7 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ### Phase 3 — Find Jobs Page
 
-- [ ] 09 Find Jobs Page — Full UI
+- [x] 09 Find Jobs Page — Full UI
 - [ ] 10 Adzuna Job Discovery
 - [ ] 11 Filter + Sort + Pagination
 
@@ -84,6 +84,11 @@ Update this file after every completed feature. Any AI agent reading this should
 - 2026-08-13 — `lib/resume-pdf.tsx` exports `buildResumeDocument()`, not the component. This keeps every piece of JSX out of the route (`app/` holds no UI logic) and types correctly — `createElement()` infers from props and loses the `DocumentProps` shape `renderToBuffer` requires, while a JSX literal inside the route's try/catch trips `react-hooks/error-boundaries`.
 - 2026-08-13 — The PDF palette is **literal hex in `lib/resume-pdf.tsx`**, the one sanctioned exception to the no-hardcoded-colour rule. @react-pdf/renderer resolves styles in a PDF layout engine with no CSS custom properties, so `var(--color-text-primary)` resolves to nothing. Values are copied from `ui-tokens.md` and must be updated alongside it.
 - 2026-08-13 — Gemini tuning is empirical, not guessed: `thinking_level: "minimal"` plus `maxItems` on arrays plus a `required` list. At `"low"` with no bounds, 1 run in 5 truncated and results populated ~half the fields. Thinking tokens are drawn from `max_output_tokens` and vary run to run, so budgets are generous (4000) and `status: "incomplete"` is checked explicitly.
+- 2026-08-14 — Feature 09 built pixel-exact to `context/designs/find-jobs.png` per explicit instruction, which surfaced three conflicts between the delivered design and prior docs/build-plan text, each resolved with the developer:
+  - **SOURCE column**: the build plan calls for a Search/URL badge column; the delivered screenshot doesn't show one. Kept it — `jobs.source` is a real, constrained DB column (`'search' | 'url'`), and dropping it now would just mean adding it back later.
+  - **Match score thresholds**: `ui-rules.md` and `ui-tokens.md` disagreed with each other, and neither matched the image. Rebuilt to the image's actual pixels — green ≥90%, blue 80-89%, orange below 80% — and corrected both docs so there's one definition going forward.
+  - **Navbar**: the design's authenticated navbar (icon-labeled nav items, active item in accent + underline, no marketing CTA) didn't match the shared `Navbar.tsx`, which is homepage-only styling reused as-is on every authenticated route. Built a new `AppNavbar` (`"use client"`, `usePathname`-driven active state) and switched Dashboard, Profile, and Find Jobs to it; the public `Navbar` is untouched. This also corrected `ui-rules.md`'s "no underline" claim.
+- 2026-08-14 — Feature 09 is UI-only by design, matching the Feature 05 precedent: every component is a plain Server Component (no `useState`, no handlers) except `AppNavbar`, whose only client requirement is `usePathname()` for nav active-state. Mock data lives in `lib/mock-jobs.ts` as a throwaway `MockJob[]` shape (not the eventual DB `Job` type) so Feature 10/11 aren't constrained by it.
 
 ---
 

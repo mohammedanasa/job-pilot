@@ -157,12 +157,11 @@ Used for: primary buttons, active nav items, match score bars, tailored badge, f
 
 Match score bars and indicators use gradient stops based on score range:
 
-| Score Range | Color  | Token                                  |
-| ----------- | ------ | -------------------------------------- |
-| 90-100%     | Green  | `text-success` / `bg-success-lightest` |
-| 70-89%      | Green  | `text-success` / `bg-success-light`    |
-| 50-69%      | Orange | `text-warning`                         |
-| Below 50%   | Gray   | `text-text-muted`                      |
+| Score Range | Color  | Token        |
+| ----------- | ------ | ------------ |
+| 90-100%     | Green  | `bg-success` |
+| 80-89%      | Blue   | `bg-info`    |
+| Below 80%   | Orange | `bg-warning` |
 
 ### Skills Badges
 
@@ -175,8 +174,11 @@ Match score bars and indicators use gradient stops based on score range:
 
 | Source   | Background             | Text                  |
 | -------- | ---------------------- | --------------------- |
+| Search   | `bg-accent-light`      | `text-accent`         |
 | LinkedIn | `bg-linkedin-light`    | `text-linkedin`       |
 | URL      | `bg-surface-secondary` | `text-text-secondary` |
+
+`jobs.source` is constrained to `'search' \| 'url'` at the DB level — the LinkedIn row is reserved for a future source value, not currently reachable.
 
 ### Status Badges
 

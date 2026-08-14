@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
+import { AppNavbar } from "@/components/layout/AppNavbar";
 import { CompletionBanner } from "@/components/profile/CompletionBanner";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { createInsforgeServer } from "@/lib/insforge-server";
@@ -57,7 +57,7 @@ export default async function ProfilePage(): Promise<ReactElement> {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <AppNavbar />
       <main className="mx-auto max-w-[1268px] px-6 py-8">
         <div className="flex flex-col gap-6">
           {percentage < 100 && (

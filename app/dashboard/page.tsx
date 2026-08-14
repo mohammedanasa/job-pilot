@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
+import { AppNavbar } from "@/components/layout/AppNavbar";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import type { ReactElement } from "react";
 
@@ -13,7 +13,7 @@ export default async function DashboardPage(): Promise<ReactElement> {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <AppNavbar />
       <main className="mx-auto max-w-[1268px] px-6 py-8">
         <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
           <p className="text-xs font-normal uppercase leading-4 text-text-muted">Dashboard</p>

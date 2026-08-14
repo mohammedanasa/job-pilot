@@ -306,3 +306,41 @@ Last updated: 2026-06-24
 
 **Pattern notes:**
 Entire form is a single `"use client"` component with all state co-located. Sections separated by `border-t border-border` dividers within one card. Email field uses `bg-surface-secondary cursor-not-allowed` read-only treatment. Work Experience section manages a `WorkExperience[]` array — add (max 3) and remove (min 1) controlled by length checks. TagInput reused for both Skills and Industries with separate suggestion arrays.
+
+### AppNavbar
+
+File: components/layout/AppNavbar.tsx
+Last updated: 2026-08-14
+
+| Property         | Class                                                                 |
+| ---------------- | ---------------------------------------------------------------------- |
+| Background       | `bg-surface`                                                          |
+| Border           | `border-b border-border`                                              |
+| Border radius    | `none`                                                                |
+| Text — primary   | `text-text-dark text-sm font-medium leading-5`, active uses `text-accent` |
+| Spacing          | `h-16 px-6 gap-8`, nav items `gap-1.5 pb-4`                           |
+| Hover state      | `hover:text-accent`                                                   |
+| Shadow           | `none`                                                                |
+| Accent usage     | Active item text is `text-accent` with a `bg-accent` underline bar    |
+
+**Pattern notes:**
+`"use client"` — the only reason is `usePathname()` to compute active-state. Replaces the marketing `Navbar` on every authenticated page (Dashboard, Profile, Find Jobs); the public `Navbar` component is untouched and still used on the homepage. Each nav item has a small leading `lucide-react` icon (Dashboard: `LayoutGrid`, Find Jobs: `Search`, Profile: `UserRound`) and the active item gets a `text-accent` color change plus a 2px `bg-accent` underline bar (`absolute inset-x-0 -bottom-px h-0.5`), which corrects `ui-rules.md`'s earlier "no underline" note — the delivered Find Jobs design shows one. No marketing CTA renders here, unlike the public Navbar's "Start for free" button.
+
+### Feature 09 — Find Jobs Page (Full UI)
+
+Files: app/find-jobs/page.tsx, components/find-jobs/SearchControls.tsx, components/find-jobs/JobsFilterBar.tsx, components/find-jobs/JobsTable.tsx, components/find-jobs/MatchScoreBar.tsx, components/find-jobs/SourceBadge.tsx, components/find-jobs/Pagination.tsx, lib/mock-jobs.ts
+Last updated: 2026-08-14
+
+| Property         | Class                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| Background       | `bg-surface` cards, table rows `hover:bg-surface-secondary`                        |
+| Border           | `border border-border` cards, `border-b border-border` table rows/filter bar divider |
+| Border radius    | `rounded-2xl` cards, `rounded-md` inputs/selects/pagination buttons, `rounded-full` badges and score bar |
+| Text — primary   | `text-sm font-medium leading-5 text-text-primary` body/table cells                  |
+| Text — secondary | `text-xs font-medium uppercase tracking-wide text-text-secondary` labels/table headers |
+| Spacing          | `p-6` search card, `p-4` filter bar/pagination, `px-4 py-4` table cells             |
+| Shadow           | `shadow-sm`                                                                        |
+| Accent usage     | Find Jobs button `bg-accent text-accent-foreground`; active pagination page `border-accent bg-accent-light text-accent`; Search source badge `bg-accent-light text-accent` |
+
+**Pattern notes:**
+Every piece is a plain Server Component — no `"use client"`, no state, no handlers. Inputs, dropdowns, and pagination controls are visually complete but inert; `lib/mock-jobs.ts` holds a hardcoded `MockJob[]` (not the future DB `Job` shape — `dateFound` is a pre-formatted display string like "2 hours ago", not a timestamp) matching Feature 11's job to make real. `MatchScoreBar` and `SourceBadge` are standalone so the Job Details page (Phase 4) can reuse them directly. Match score color is threshold-based, not gradient: `bg-success` at 90%+, `bg-info` at 80-89%, `bg-warning` below 80% — corrected from two conflicting ranges previously in `ui-rules.md` and `ui-tokens.md` to match the delivered design pixel-for-pixel. Filter bar's "All Matches" / "Match Score" dropdowns are native `<select>` elements styled as compact auto-width pills (`appearance-none` + absolutely-positioned `ChevronDown`), not a custom Radix/shadcn menu — no such primitive is installed yet, and a native select achieves the same look. The SOURCE column was added to the table even though the delivered screenshot doesn't show one, because `jobs.source` is a real, constrained DB column (`'search' | 'url'`) — omitting it now would just mean adding it back later.
