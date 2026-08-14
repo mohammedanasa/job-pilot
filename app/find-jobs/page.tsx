@@ -5,7 +5,7 @@ import { JobsTable } from "@/components/find-jobs/JobsTable";
 import { Pagination } from "@/components/find-jobs/Pagination";
 import { SearchControls } from "@/components/find-jobs/SearchControls";
 import { createInsforgeServer } from "@/lib/insforge-server";
-import { MOCK_JOBS } from "@/lib/mock-jobs";
+import type { JobRow } from "@/types";
 import type { ReactElement } from "react";
 
 export default async function FindJobsPage(): Promise<ReactElement> {
@@ -14,6 +14,16 @@ export default async function FindJobsPage(): Promise<ReactElement> {
 
   if (!data.user) {
     redirect("/login");
+  }
+
+  const { data: jobs, error } = await insforge.database
+    .from("jobs")
+    .select("*")
+    .eq("user_id", data.user.id)
+    .order("found_at", { ascending: false });
+
+  if (error) {
+    console.error("[find-jobs/page]", error);
   }
 
   return (
@@ -25,7 +35,7 @@ export default async function FindJobsPage(): Promise<ReactElement> {
         <section className="rounded-2xl border border-border bg-surface shadow-sm">
           <JobsFilterBar />
           <div className="overflow-x-auto">
-            <JobsTable jobs={MOCK_JOBS} />
+            <JobsTable jobs={(jobs as JobRow[] | null) ?? []} />
           </div>
           <Pagination />
         </section>

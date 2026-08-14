@@ -328,8 +328,8 @@ Last updated: 2026-08-14
 
 ### Feature 09 — Find Jobs Page (Full UI)
 
-Files: app/find-jobs/page.tsx, components/find-jobs/SearchControls.tsx, components/find-jobs/JobsFilterBar.tsx, components/find-jobs/JobsTable.tsx, components/find-jobs/MatchScoreBar.tsx, components/find-jobs/SourceBadge.tsx, components/find-jobs/Pagination.tsx, lib/mock-jobs.ts
-Last updated: 2026-08-14
+Files: app/find-jobs/page.tsx, components/find-jobs/JobsFilterBar.tsx, components/find-jobs/MatchScoreBar.tsx, components/find-jobs/SourceBadge.tsx, components/find-jobs/Pagination.tsx
+Last updated: 2026-08-14 (superseded in part by Feature 10 — see below)
 
 | Property         | Class                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------ |
@@ -343,4 +343,18 @@ Last updated: 2026-08-14
 | Accent usage     | Find Jobs button `bg-accent text-accent-foreground`; active pagination page `border-accent bg-accent-light text-accent`; Search source badge `bg-accent-light text-accent` |
 
 **Pattern notes:**
-Every piece is a plain Server Component — no `"use client"`, no state, no handlers. Inputs, dropdowns, and pagination controls are visually complete but inert; `lib/mock-jobs.ts` holds a hardcoded `MockJob[]` (not the future DB `Job` shape — `dateFound` is a pre-formatted display string like "2 hours ago", not a timestamp) matching Feature 11's job to make real. `MatchScoreBar` and `SourceBadge` are standalone so the Job Details page (Phase 4) can reuse them directly. Match score color is threshold-based, not gradient: `bg-success` at 90%+, `bg-info` at 80-89%, `bg-warning` below 80% — corrected from two conflicting ranges previously in `ui-rules.md` and `ui-tokens.md` to match the delivered design pixel-for-pixel. Filter bar's "All Matches" / "Match Score" dropdowns are native `<select>` elements styled as compact auto-width pills (`appearance-none` + absolutely-positioned `ChevronDown`), not a custom Radix/shadcn menu — no such primitive is installed yet, and a native select achieves the same look. The SOURCE column was added to the table even though the delivered screenshot doesn't show one, because `jobs.source` is a real, constrained DB column (`'search' | 'url'`) — omitting it now would just mean adding it back later.
+`MatchScoreBar` and `SourceBadge` are standalone so the Job Details page (Phase 4) can reuse them directly. Match score color is threshold-based, not gradient: `bg-success` at 90%+, `bg-info` at 80-89%, `bg-warning` below 80% — corrected from two conflicting ranges previously in `ui-rules.md` and `ui-tokens.md` to match the delivered design pixel-for-pixel. Filter bar's "All Matches" / "Match Score" dropdowns are native `<select>` elements styled as compact auto-width pills (`appearance-none` + absolutely-positioned `ChevronDown`), not a custom Radix/shadcn menu — no such primitive is installed yet, and a native select is still inert pending Feature 11. The SOURCE column was added to the table even though the delivered screenshot doesn't show one, because `jobs.source` is a real, constrained DB column (`'search' | 'url'`) — omitting it now would just mean adding it back later.
+
+### Feature 10 — Adzuna Job Discovery (wires Find Jobs to real data)
+
+Files: app/api/agent/find/route.ts, agent/adzuna.ts, agent/matcher.ts, agent/types.ts, lib/adzuna.ts, lib/utils.ts, app/find-jobs/page.tsx, components/find-jobs/SearchControls.tsx, components/find-jobs/JobsTable.tsx
+Last updated: 2026-08-14
+
+No new visual patterns — reuses Feature 09's card/table/badge classes exactly. What changed is data and behavior:
+
+- `lib/mock-jobs.ts` is deleted. `app/find-jobs/page.tsx` queries the real `jobs` table for the current user, newest-first. `JobsTable` now takes `JobRow[]` (`types/index.ts`) instead of `MockJob[]`.
+- `JobsTable` gained an empty state (per `ui-rules.md`'s "every section that can be empty must have one" rule) — centered `Search` icon + muted text, shown when the user has zero saved jobs. Not designed against a screenshot; kept intentionally minimal per the same rule.
+- `SearchControls` is now `"use client"` (controlled inputs, submit handler, loading spinner via `Loader2` with `animate-spin`, disabled state while searching). The static green banner is now conditional on a real result and its copy changed to "Found N jobs — M strong matches" (previously implied only strong matches were saved — see progress-tracker.md decision log). A new error banner reuses `bg-error`/`text-error-foreground` (solid, not `-lightest` — `--color-error` has no light variant, unlike success/info/warning) for request failures and the 422 profile-gate message.
+
+**Pattern notes:**
+This feature is data/logic-only by design once the two components above changed — no new component files were created for the find-jobs UI itself. See progress-tracker.md's 2026-08-14 Feature 10 entry for the underlying architecture (batched AI scoring, dedup, profile gate).

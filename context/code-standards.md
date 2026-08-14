@@ -247,13 +247,19 @@ All environment variables defined in `.env.local` for development. Never hardcod
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | lib/insforge-client.ts |
 | `BROWSERBASE_API_KEY`           | lib/browserbase.ts     |
 | `BROWSERBASE_PROJECT_ID`        | lib/browserbase.ts     |
-| `OPENAI_API_KEY`                | agent/ functions       |
+| `GEMINI_API_KEY`                | lib/ai/gemini.ts       |
+| `GROQ_API_KEY`                  | lib/ai/groq.ts         |
+| `AI_PROVIDER`                   | lib/ai/index.ts        |
 | `ADZUNA_APP_ID`                 | lib/adzuna.ts          |
 | `ADZUNA_APP_KEY`                | lib/adzuna.ts          |
 | `NEXT_PUBLIC_POSTHOG_KEY`       | lib/posthog-client.ts  |
 | `NEXT_PUBLIC_POSTHOG_HOST`      | lib/posthog-client.ts  |
 
 `NEXT_PUBLIC_` prefix means the variable is exposed to the browser. Never add `NEXT_PUBLIC_` to secret keys.
+
+`OPENAI_API_KEY` is no longer used — GPT-4o was replaced by the provider-neutral
+`@/lib/ai` layer (Gemini + Groq) on 2026-08-13. Browserbase/Stagehand's own model
+choice for Feature 13 remains a separate, still-open decision.
 
 ---
 

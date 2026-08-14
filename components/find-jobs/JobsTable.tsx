@@ -1,13 +1,25 @@
-import { Building2 } from "lucide-react";
+import { Building2, Search } from "lucide-react";
 import { MatchScoreBar } from "@/components/find-jobs/MatchScoreBar";
 import { SourceBadge } from "@/components/find-jobs/SourceBadge";
-import type { MockJob } from "@/lib/mock-jobs";
+import { formatRelativeDate } from "@/lib/utils";
+import type { JobRow } from "@/types";
 
 type Props = {
-  jobs: MockJob[];
+  jobs: JobRow[];
 };
 
 export function JobsTable({ jobs }: Props) {
+  if (jobs.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 px-4 py-16 text-center">
+        <Search size={20} className="text-text-muted" />
+        <p className="text-sm font-medium leading-5 text-text-muted">
+          No jobs yet. Run a search above to find your first matches.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <table className="w-full border-collapse">
       <thead>
@@ -46,19 +58,23 @@ export function JobsTable({ jobs }: Props) {
               </div>
             </td>
             <td className="px-4 py-4 text-sm font-medium leading-5 text-text-primary">
-              {job.role}
+              {job.title}
             </td>
             <td className="px-4 py-4">
-              <MatchScoreBar score={job.matchScore} />
+              {job.match_score !== null ? (
+                <MatchScoreBar score={job.match_score} />
+              ) : (
+                <span className="text-sm text-text-muted">—</span>
+              )}
             </td>
             <td className="px-4 py-4 text-sm font-medium leading-5 text-text-primary">
-              {job.salaryEst}
+              {job.salary ?? "—"}
             </td>
             <td className="px-4 py-4">
               <SourceBadge source={job.source} />
             </td>
             <td className="px-4 py-4 text-sm font-medium leading-5 text-text-secondary">
-              {job.dateFound}
+              {formatRelativeDate(job.found_at)}
             </td>
           </tr>
         ))}
