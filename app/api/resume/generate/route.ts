@@ -23,6 +23,7 @@ const PROSE_SCHEMA: Record<string, unknown> = {
   properties: {
     summary: {
       type: "string",
+      maxLength: MAX_SUMMARY_CHARS,
       description: `Professional summary, 2-3 sentences, at most ${MAX_SUMMARY_CHARS} characters.`,
     },
     roles: {
@@ -38,7 +39,11 @@ const PROSE_SCHEMA: Record<string, unknown> = {
           bullets: {
             type: "array",
             maxItems: MAX_BULLETS_PER_ROLE,
-            items: { type: "string", description: "One achievement bullet, at most 180 characters." },
+            items: {
+              type: "string",
+              maxLength: 180,
+              description: "One achievement bullet, at most 180 characters.",
+            },
           },
         },
       },
@@ -98,17 +103,20 @@ function isValidProse(value: unknown): value is GeneratedResumeProse {
 
   const prose = value as Record<string, unknown>;
   if (typeof prose.summary !== "string") return false;
+  if (prose.summary.length > MAX_SUMMARY_CHARS) return false;
   if (!Array.isArray(prose.roles)) return false;
+  if (prose.roles.length > MAX_ROLES) return false;
 
   return prose.roles.every((role) => {
     if (typeof role !== "object" || role === null || Array.isArray(role)) return false;
     const entry = role as Record<string, unknown>;
-    return (
-      typeof entry.index === "number" &&
-      Number.isInteger(entry.index) &&
-      Array.isArray(entry.bullets) &&
-      entry.bullets.every((bullet) => typeof bullet === "string")
-    );
+    if (typeof entry.index !== "number" || !Number.isInteger(entry.index)) return false;
+    if (!Array.isArray(entry.bullets)) return false;
+    if (entry.bullets.length > MAX_BULLETS_PER_ROLE) return false;
+
+    return entry.bullets.every((bullet) => {
+      return typeof bullet === "string" && bullet.length <= 180;
+    });
   });
 }
 
@@ -147,11 +155,10 @@ export async function POST(): Promise<NextResponse> {
     // Deliberately not is_complete: that flag also demands salary expectation and
     // cover letter tone, neither of which appears on a resume. This is the real
     // floor — below it the model has nothing to ground prose in and starts inventing.
-    const roles = (profile.work_experience ?? []).filter(
-      (role) => role && role.keyResponsibilities?.trim(),
-    );
+    const roles = profile.work_experience ?? [];
+    const hasEligibleRole = roles.some((role) => role?.keyResponsibilities?.trim());
 
-    if (!profile.full_name?.trim() || roles.length === 0) {
+    if (!profile.full_name?.trim() || !hasEligibleRole) {
       return NextResponse.json(
         {
           success: false,

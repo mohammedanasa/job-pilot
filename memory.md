@@ -1,69 +1,60 @@
-# Memory — Features 06 + 07 (Profile Save, AI Extraction, Multi-Provider AI Layer)
+# Memory — Feature 08 (Resume PDF Generation from Profile)
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 ## What was built
 
-**Feature 06 — Profile Save Logic** (was already on disk, unrecorded, at session start):
+**Feature 08 — Resume PDF Generation from Profile**, via `/architect feature 8` then full implementation:
 
-- `actions/profile.ts` — `saveProfile` Server Action; upserts the whole form, computes completion, `revalidatePath('/profile')`
-- `app/api/resume/upload/route.ts` + `app/api/resume/download/route.ts`
-- `migrations/20260813104026_add-resume-pdf-key.sql` — applied live
-- `app/profile/page.tsx` prefills from DB and passes real `userEmail`
-
-**Feature 07 — AI Profile Extraction:**
-
-- `app/api/resume/extract/route.ts` — auth guard → fetch PDF from storage by `resume_pdf_key` → pdf-parse → 200-char floor → AI → shape check
-- `types/index.ts` — added `ExtractedProfile` (narrower than `ProfileFormData` by design)
-- `components/profile/ResumeSection.tsx` — Extract button, gated on `uploadState === "success"`
-- `components/profile/ProfileForm.tsx` — `applyExtracted()` with dirty-check confirm
-- `next.config.ts` — `serverExternalPackages: ["pdf-parse", "pdfjs-dist"]`
-
-**The AI layer — `lib/ai/`** (replaced a single-provider `lib/gemini.ts`):
-
-- `index.ts` — orchestrator; provider selection + fallback. **The only module routes import.**
-- `types.ts` — provider-neutral contract
-- `gemini.ts` — Google AI Studio adapter (`gemini-3.5-flash`, Interactions API)
-- `groq.ts` — Groq adapter (`openai/gpt-oss-20b`, strict `json_schema`)
+- `migrations/20260813152602_add-generated-resume-columns.sql` — adds `generated_pdf_url` / `generated_pdf_key` to `profiles`. Applied live via `npx @insforge/cli db migrations up`.
+- `lib/resume-pdf.tsx` — pure document module. Internal `ResumeDocument` component + exported `buildResumeDocument()` builder (returns the typed element, not the component, so `app/api/resume/generate/route.ts` stays a plain `.ts` file with no JSX). Palette is literal hex copied from `ui-tokens.md` — CSS vars don't resolve in the PDF engine.
+- `app/api/resume/generate/route.ts` — auth guard → read profile (`select("*")`, bodyless POST) → minimal-fields gate (full name + ≥1 role with responsibilities, 422 otherwise) → `generateJson` at temperature 0.7 for prose → `renderToBuffer` → upload to `{userId}/generated-resume.pdf` (separate slot from the uploaded resume) → write `generated_pdf_url`/`generated_pdf_key` → return `{ success, url }`.
+- `app/api/resume/download/route.ts` — now takes `?type=generated` to select `generated_pdf_key` instead of `resume_pdf_key`; default behavior unchanged.
+- `types/index.ts` — `ProfileData` gains the two new columns; new `GeneratedResumeProse` type (`summary`, `roles: [{ index, bullets[] }]`, matched by array index not company name).
+- `components/profile/ResumeSection.tsx` — wired the previously-dead "Generate Resume from Profile" button: loading state, error row, "View generated resume" link on success, disabled + explanatory label when the form is dirty.
+- `components/profile/ProfileForm.tsx` — added a `resumeFingerprint` (JSON of all resume-relevant fields, excluding job preferences) compared against a `savedFingerprint` baseline to derive `isDirty`, reset on successful save.
+- `package.json` — added `@react-pdf/renderer@4.6.0` (React 19 compatible).
+- `context/progress-tracker.md`, `context/ui-registry.md`, `context/library-docs.md` all updated with decisions and corrections (see below).
 
 ## Decisions made
 
-- **AI is provider-neutral.** Routes import `@/lib/ai` only, never an adapter. Provider-specific tuning (Gemini's `thinking_level`, Groq's strict-schema rewriting) stays inside its adapter and must never leak into `GenerateJsonRequest`.
-- **`AI_PROVIDER` env var, default `groq`** — chosen over a UI dropdown because AI vendor choice is a deployment concern, not something to put in front of a job seeker. Groq's ~1000 req/day vs Gemini's ~20 req/minute makes it the sensible primary.
-- **Fallback on quota, availability, and network failures only.** Invalid credentials, missing config, and other auth/config errors do *not* fall over — they are hard failures that must be surfaced instead of silently rerouting traffic to another provider. `bad_response` also deliberately does *not* fail over — malformed JSON is a prompt/schema problem, so retrying elsewhere spends a second quota for the same answer.
-- **Groq model is constrained, not free choice.** Strict `json_schema` (guaranteed adherence) works only on `openai/gpt-oss-20b` / `120b`. Do not swap in Llama/Qwen without dropping to best-effort.
-- **Extraction fills only resume-derived fields.** Job preferences (salary, remote, tone, titles sought) are intentions not history, never overwritten. Work experience replaced wholesale, not merged (merging duplicates roles). Dirty form → confirm first.
-- **Text to the model, not the PDF.** Keeps the empty-text guard meaningful — a scanned PDF sent directly yields confidently invented fields.
-- **Errors distinguish our fault from the user's.** Worker/environment failure → 500 "problem on our side"; genuinely unreadable PDF → 422 "try a different file".
+- **Two storage slots, not one.** The build plan said to `upsert` onto the same path the uploaded resume occupies (`{user_id}/resume.pdf`). Rejected — it would destroy the user's original file and repoint `resume_pdf_key`, making Feature 07's extraction read our own AI prose back as if it were the user's resume. Generated PDFs live at a separate path/columns entirely.
+- **Route reads the DB, not the request body** (bodyless POST, like `/extract`). A dirty form disables the Generate button rather than the route accepting arbitrary unsaved form state.
+- **Gate is minimal (name + 1 role), not `is_complete`.** `is_complete` demands fields (salary expectation, cover letter tone) that never appear on a resume and would block generation for no good reason.
+- **Bound the model's output, don't truncate the render.** Summary ≤400 chars, ≤3 bullets/role, ≤3 roles — enforced in the JSON schema so the model produces complete bounded prose rather than the layout engine cutting a bullet mid-sentence.
+- **Model writes prose only.** Names, dates, employers, skills, education are copied verbatim from the profile; only `summary` and per-role `bullets` come from AI. Roles matched back by array `index`, not company name (duplicate employers are common).
+- **`lib/resume-pdf.tsx`, not `components/`.** Keeps `@react-pdf/renderer` out of any path a client component could import, and keeps the API route free of JSX per `architecture.md`'s "app/ owns no UI logic" rule.
+- **Return a URL, not raw bytes** — `{ success, url }`, mirroring the existing upload/extract routes, with the browser showing a link rather than auto-downloading.
 
 ## Problems solved
 
-- **pdfjs worker did not resolve under Turbopack** — every extraction threw and was reported to the user as a bad PDF. Fixed with `serverExternalPackages`. The failure appears *only at runtime*; `npm run build` passed throughout.
-- **pdf-parse v2 is a class**, not the v1 default-export function that `library-docs.md` documented. `new PDFParse({data})` → `getText()` → `destroy()`.
-- **Gemini's Interactions API has no `output_text` over raw REST** (SDK-only), and `steps[0]` is the *thought* step — the answer must be found by `type === "model_output"`.
-- **Thinking tokens consume `max_output_tokens`.** The build plan's 800 (written for GPT-4o) left 18 tokens for output. Fixed with `thinking_level: "minimal"`, `maxItems` bounds, and a `required` list.
-- **`gemini-2.0-flash` is shut down** — verified live rather than assumed.
-- **Gemini's limit is ~20/minute, not daily** — an earlier note in the tracker recorded this wrongly; corrected there.
+- **The InsForge SDK's `storage.upload()` takes exactly two arguments — no options object, no `upsert` flag** — contrary to what `library-docs.md` and the build plan said. Verified directly: uploaded the same object key three times via the CLI and read it back — writes silently overwrite. This is what makes resume regeneration after a profile edit actually work. `library-docs.md` corrected.
+- **`react-hooks/error-boundaries` lint error** on JSX inside a route's try/catch (`renderToBuffer(<ResumeDocument .../>)`). Fixed by moving all JSX into `lib/resume-pdf.tsx` behind a `buildResumeDocument()` builder that returns a properly-typed `ReactElement<DocumentProps>` — `createElement()` alone doesn't produce that type, since it infers from the component's props, not its return type.
+- **First-person leakage in AI-generated summaries** ("I lead platform teams...") despite a third-person instruction buried in a rule list. Fixed by pulling it out into an explicit no-pronoun instruction with a positive/negative example; verified clean across three consecutive live Groq runs at temperature 0.7.
+- **`__pdfprobe` route returned 404** — Next treats `_`-prefixed folders under `app/` as private/excluded from routing. Renamed to `pdfprobe` (no leading underscore) to actually reach the route handler during verification.
 
 ## Current state
 
-- Features 04, 06, 07 all complete. **Developer confirmed extraction working in the browser on a real resume.**
-- Verified in the Next runtime (not just `tsx`): pdf-parse → `lib/ai` → Groq returns complete, correct extraction.
-- Fallback verified: with `AI_PROVIDER=gemini` and Gemini rate-limited or temporarily unavailable, requests still succeed via Groq. Invalid keys or misconfigured credentials are treated as hard failures and do not silently reroute.
-- `npm run lint` and `npm run build` pass.
-- **All of Features 04, 06, and 07 are UNCOMMITTED.** Last commit is `9a6d749` (Feature 05).
+- Feature 08 complete. `npm run lint` and `npm run build` both pass from a clean `.next`.
+- **Verified live, not just built:**
+  - `renderToBuffer` runs successfully **inside the Next dev server under Turbopack** (via a temporary probe route, since deleted) — confirmed `@react-pdf/renderer` needs **no** `serverExternalPackages` entry, unlike pdf-parse.
+  - The rendered PDF was visually inspected (converted to PNG) — layout, date formatting, bullets, and one-page fit all correct.
+  - The prose JSON schema (nested objects, integer `index`, bounded arrays) verified against live Groq with strict `json_schema` mode.
+  - `/api/resume/generate` confirmed to load in the real route table and correctly reject unauthenticated calls with 401.
+- **Not verified:** the full authenticated browser path (click Generate → real profile → AI → upload → DB → link appears) has not been exercised end to end in a real session — this is the same class of gap that hid Feature 07's Turbopack bug, so it's the first thing to check next.
+- Migration `20260813152602` is applied and confirmed live (`generated_pdf_url`/`generated_pdf_key` present on `profiles`).
+- **Features 06, 07, and 08 are all still UNCOMMITTED.** Last commit remains `8c106a7` (Feature 04 schema). Developer was asked whether to commit and had not yet answered when this session ended.
 
 ## Next session starts with
 
 1. `/remember restore`
-2. **Commit Features 04, 06, 07** — three features deep in the working tree is the top risk right now.
-3. Then Feature 08 — Resume PDF Generation from Profile. Run `/architect feature 08` first.
-   - Scope: `POST /api/resume/generate`, read profile → AI generates summary + polished bullets → `@react-pdf/renderer` `renderToBuffer()` → upload to `resumes/{user_id}/resume.pdf` with `upsert: true` → update `resume_pdf_url` **and `resume_pdf_key`**.
-   - It depends on the `serverExternalPackages` entry already in `next.config.ts`.
-   - `library-docs.md` still specifies GPT-4o for Feature 08 prose generation — use `@/lib/ai` instead. Temperature 0.7 for generation (vs 0.3 for extraction).
+2. **Answer/resolve: commit Features 06, 07, 08.** Three features deep in the working tree — this is the top risk carried over from last session too.
+3. **Do the one unverified check**: log in for real, fill/save a profile with at least one role, click "Generate Resume from Profile" in the browser, confirm the link appears and the downloaded PDF is correct. Given the Feature 07 precedent (build passed, feature was completely broken at runtime), don't mark Feature 08 fully trustworthy until this happens.
+4. Then Feature 09 — Find Jobs Page, full UI, mock data only (Phase 3 start). No logic yet per the build plan.
 
 ## Open questions
 
-- **Completion percentage is computed in two places** — `app/profile/page.tsx` (banner) and `actions/profile.ts` (`is_complete`), against two separate nine-item lists. They agree today; adding a required field to one silently diverges them. Consolidating into a shared helper was flagged but deliberately not done — it's a scope call.
-- **Feature 13's Stagehand config still names an OpenAI model** for browser automation. Left alone deliberately: Stagehand's provider support is its own question, to be decided when Feature 13 is built.
-- `scripts/setup-db.sql` may still duplicate the migration — worth deleting if so.
+- Same two carried from before, still unresolved:
+  - Completion percentage computed in two places (`app/profile/page.tsx` banner vs. `actions/profile.ts` `is_complete`) against separate nine-item lists — consolidating deliberately deferred as a scope call.
+  - `scripts/setup-db.sql` may still duplicate the migration — worth checking/deleting if so.
+- New: no PostHog event was added for resume generation (`resume_generated` isn't on the approved whitelist in `code-standards.md`). Left out deliberately — adding to the whitelist is a product call, not an implementation default.
