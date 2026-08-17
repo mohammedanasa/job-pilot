@@ -143,6 +143,8 @@ export type JobFilters = {
   page: number;
 };
 
+import type { CompanyDossier } from "@/agent/types";
+
 export type JobRow = {
   id: string;
   run_id: string | null;
@@ -165,6 +167,14 @@ export type JobRow = {
   match_reason: string | null;
   matched_skills: string[] | null;
   missing_skills: string[] | null;
-  company_research: Record<string, unknown> | null;
+  company_research: CompanyDossier | null;
+  company_researched_at: string | null;
   found_at: string;
+};
+
+export type DashboardStat = {
+  label: string;
+  value: string;
+  trend: string;
+  subtitle: string;
 };

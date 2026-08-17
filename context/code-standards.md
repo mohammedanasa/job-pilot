@@ -323,5 +323,6 @@ Approved dependencies for this project:
 - `lucide-react` — Icons
 - `tailwindcss` — Styling
 - `shadcn/ui` components — UI primitives
+- `recharts` — Dashboard charts (added 2026-08-15, Feature 14). Already named in `architecture.md` and `build-plan.md` for Feature 17's real chart data; installed early so Feature 14's mock-data charts and Feature 17's real-data charts are the same components with different data, not two implementations.
 
 Do not install any other packages without updating this list first.

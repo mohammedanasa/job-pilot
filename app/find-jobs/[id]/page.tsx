@@ -53,7 +53,11 @@ export default async function JobDetailsPage({ params }: Props): Promise<ReactEl
         <JobInfo job={jobRow} />
         <MatchScore job={jobRow} />
         <JobDescription aboutRole={jobRow.about_role} applyUrl={jobRow.external_apply_url} />
-        <CompanyResearch company={jobRow.company ?? "this company"} />
+        <CompanyResearch
+          jobId={jobRow.id}
+          company={jobRow.company ?? "this company"}
+          research={jobRow.company_research}
+        />
         <JobActions applyUrl={jobRow.external_apply_url} company={jobRow.company} />
       </main>
     </div>

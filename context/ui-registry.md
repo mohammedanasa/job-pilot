@@ -406,6 +406,111 @@ All Server Components, no `"use client"` anywhere in this feature — the page f
 
 `JobDescription.tsx` also takes `applyUrl` (Feature 12 `/review` fix, 2026-08-14): Adzuna's search API caps `description` at exactly 500 characters server-side, trailing it with its own `…` — confirmed live against multiple listings, not a truncation this codebase performs. There is no more text to recover client-side, so a description whose length is `>= 500` renders a `text-sm font-semibold text-accent hover:underline` link — "Read the full description on the original posting →" — to `external_apply_url`, the same Adzuna redirect already used by View Job Post and Apply Now.
 
-`CompanyResearch.tsx` always renders the "No research yet" empty state in this feature; the Research Company button is `disabled` (not merely unwired) so its non-functional state is self-evident, since Feature 13 owns making it work. `JobActions.tsx` is the full-width Apply Now bar at the bottom of the page, outside any card, matching the design.
+`CompanyResearch.tsx` originally always rendered the "No research yet" empty state with the Research Company button `disabled`, since Feature 13 owned making it work — **superseded by Feature 13 below**, which wires the button up.
+
+`JobActions.tsx` is the full-width Apply Now bar at the bottom of the page, outside any card, matching the design.
 
 The Find Jobs table gained navigation: `JobsTable.tsx`'s company cell is now a `<Link href={\`/find-jobs/${job.id}\`}>` with `after:absolute after:inset-0` on a `relative` `<tr>`, stretching the click target to the full row without wrapping the `<tr>` itself in an anchor (invalid HTML). No new classes — reuses the existing hover/border row treatment.
+
+### Feature 13 — Company Research Agent
+
+Files: components/job-details/CompanyResearch.tsx, app/find-jobs/[id]/page.tsx
+
+Last updated: 2026-08-15
+
+| Property         | Class                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| Background       | `bg-surface` card, `bg-surface-secondary` tag pills, `bg-success-lightest` Your Edge highlight box |
+| Border            | `border border-border` card, `border-t border-border` divider per section          |
+| Border radius     | `rounded-2xl` card, `rounded-md` button, `rounded-full` icon badges/tag pills, `rounded-xl` notice banners |
+| Text — primary    | `text-sm font-medium leading-6 text-text-primary` body copy                       |
+| Text — secondary  | `text-sm font-semibold leading-5 text-text-primary` section headings, `text-xs font-medium uppercase tracking-wide text-text-secondary` Sources label |
+| Spacing           | `p-6` header, `px-6 py-5` per section, `gap-2` icon+heading rows                   |
+| Shadow            | `shadow-sm`                                                                         |
+| Accent usage      | Section icon badges `bg-accent-muted text-accent`; Research/Re-run button `bg-accent text-accent-foreground`; grounding notice `bg-info-lightest text-info-foreground`; error banner `bg-error text-error-foreground` (same as `SearchControls.tsx`, no `-lightest` variant exists for error) |
+
+**Pattern notes:**
+`CompanyResearch.tsx` is now `"use client"` (was a plain Server Component through Feature 12) — it owns the fetch, loading spinner, and re-run state the same way `SearchControls.tsx` does for job search: `isResearching`/`error`/local `dossier` state, `Loader2` spin on the button icon, `router.refresh()` after a successful save so the server-rendered page picks up the persisted row on next navigation. The parent page now passes `jobId` and `job.company_research` as props instead of just `company`.
+
+Button label is state-driven: `"Research Company"` when no dossier exists yet, `"Re-run Research"` once one does — it never disappears, so a thin dossier (ATS dead end, JS-rendered homepage) can always be retried.
+
+Each of the 9 dossier fields is its own `Section` (shared local component: icon badge + heading + `border-t` divider), conditionally rendered only when non-empty — `techStack`/`culture`/`yourEdge`/`gapsToAddress`/`smartQuestions`/`interviewPrep`/`sources` all skip rendering on an empty array, `companyOverview`/`whyThisRole` always render since the AI layer requires them. Tag-shaped fields (`techStack`) use a local `TagList` (`bg-surface-secondary` pills, neutral — no accent, since these are descriptive facts, not a status). Bullet-shaped fields (`culture`, `gapsToAddress`, `smartQuestions`, `interviewPrep`) use a local `BulletList` (small `bg-text-muted` dot marker, not a Lucide icon — matches the plain-paragraph density the design calls for elsewhere on this page). `yourEdge` is the one bullet list wrapped in a `bg-success-lightest` box, per the build plan's "highlight — specific to this candidate" instruction — the only field that gets a tinted background instead of plain text.
+
+**Grounding notice** (new pattern, not in `ui-tokens.md` before this feature): a `CompanyDossier.grounded === false` dossier renders an `Info`-icon `bg-info-lightest`/`text-info-foreground` banner above the sections — "Based on the job posting only — we couldn't reach {company}'s website." This is the info-blue token's first real usage outside `ui-tokens.md`'s reference table; reuses the exact banner shape `SearchControls.tsx` established for its success/error banners, just with the info token instead of success/error.
+
+Sources render as a plain list of external links (`text-accent hover:underline`, `target="_blank" rel="noopener noreferrer"`), not pills — these are URLs meant to be read and opened, not tags.
+
+### Feature 14 — Dashboard Page (Full UI)
+
+Files: app/dashboard/page.tsx, components/dashboard/StatsBar.tsx, components/dashboard/RecentActivity.tsx, components/dashboard/AnalyticsCharts.tsx, components/dashboard/IncompleteProfileBanner.tsx, lib/mock-dashboard.ts
+
+Last updated: 2026-08-15 (StatsBar's data source superseded by Feature 15 — see below; visual pattern unchanged)
+
+| Property         | Class                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| Background       | `bg-surface` cards                                                                  |
+| Border            | `border border-border`                                                             |
+| Border radius     | `rounded-2xl` cards, `rounded-md` buttons, `rounded-full` activity dots            |
+| Text — primary    | `text-base font-semibold leading-6 text-text-primary` card headings, `text-[30px] font-semibold leading-9 text-text-primary` stat numbers |
+| Text — secondary  | `text-sm font-medium leading-5 text-text-secondary` card labels, `text-xs font-normal leading-4 text-text-muted` subtitles/timestamps |
+| Spacing           | `p-6` cards, `gap-6` between all dashboard sections, `grid grid-cols-4` stats row, `grid grid-cols-2` chart/activity rows |
+| Shadow            | `shadow-sm`                                                                         |
+| Accent usage      | Trend badges `bg-success-lightest text-success-darker rounded-sm` (not pill-shaped, matches `ui-tokens.md`'s Trend Badges spec exactly); Complete Profile CTA `bg-accent text-accent-foreground` |
+
+**Pattern notes:**
+Built directly against `context/designs/dashboard.png`, matching pixel-for-pixel per verification screenshot (see progress-tracker.md 2026-08-15 note). `app/dashboard/page.tsx` stays a Server Component doing exactly one real query — `profiles.is_complete` for the incomplete-profile banner — everything else (`StatsBar`, `RecentActivity`, all 3 charts) renders from `lib/mock-dashboard.ts`, a disposable mock file matching the `lib/mock-jobs.ts` precedent from Feature 09, expected to be replaced by Features 15–17.
+
+`StatsBar.tsx` is a plain 4-column grid, each card only rendering a trend badge when `stat.trend` is non-empty — the design shows a trend badge on the first two cards (Total Jobs Found, Avg. Match Rate) but not the last two (Companies Researched, Jobs This Week), which are lifetime/weekly totals rather than week-over-week deltas.
+
+`RecentActivity.tsx` dots follow the existing 3-color Activity Dots table in `ui-tokens.md` (accent/info/success), no new tokens: company-research entries always use the info-blue pair, job-search entries alternate accent-purple and success-green per row to match the delivered design's specific per-row colors (which don't reduce to a clean type→color rule). A pure helper (`withJobSearchIndex`) precomputes each row's alternating index outside the render loop — an in-render `let` counter mutated inside `.map()` trips this project's React Compiler lint rule (`react-hooks/immutability`, "Cannot reassign variable after render completes").
+
+`AnalyticsCharts.tsx` exports three separate named chart components (`CompanyResearchActivityChart`, `JobsFoundOverTimeChart`, `MatchScoreDistributionChart`) rather than one combined component — each wraps `recharts`' `ResponsiveContainer` inside a shared local `ChartCard` (title + `h-64` container). `"use client"` is required — `recharts` renders via browser APIs (ResizeObserver, SVG measurement). Colors are the literal hex values from `ui-tokens.md`'s Dashboard Chart Colors table (`#61A8FF` bars, `#7C5CFC` line + gradient fill, `#10B981` bars, `#E7EAF3` dashed grid, `#9CA3AF` axis labels) passed straight to `recharts` props (`fill`, `stroke`) — `recharts` doesn't read CSS custom properties for SVG fills, so this is the same sanctioned literal-hex exception `lib/resume-pdf.tsx` already established for `@react-pdf/renderer`, extended here for the same reason (an SVG-rendering library with no CSS variable support).
+
+`IncompleteProfileBanner.tsx` is a new, smaller sibling to `components/profile/CompletionBanner.tsx` — not a reuse. The profile page's banner needs a percentage and a missing-fields list to draw its donut ring; the dashboard only checks the stored `profiles.is_complete` boolean and the delivered design shows no banner at all (the screenshot's account is apparently already complete), so a single-line message-plus-CTA card was built instead. Same card shell classes as everything else on the page — no new visual pattern beyond the existing card/button tokens.
+
+**Known conflict, resolved in favor of the design:** `build-plan.md`'s Feature 14 spec lists a "Cover Letters Generated" 4th stat card and a "Resume Tailoring Activity" bar chart; the delivered `dashboard.png` shows neither, and `project-overview.md`'s Dashboard section already matches the image (Jobs This Week, no cover-letter chart). Cover Letter Generation is out of scope project-wide — see progress-tracker.md's 2026-08-15 decision note for the full resolution.
+
+### Feature 15 — Stats Bar (Real Data)
+
+Files: app/dashboard/page.tsx, components/dashboard/StatsBar.tsx, lib/dashboard-stats.ts, types/index.ts, lib/mock-dashboard.ts
+
+Last updated: 2026-08-15
+
+No new visual classes — `StatsBar.tsx`'s markup, spacing, and card styling are untouched from Feature 14. What changed is the data source and the prop type: `stats: MockStat[]` became `stats: DashboardStat[]` (new shared type in `types/index.ts`, next to `JobRow`), and `MockStat`/`MOCK_STATS` were deleted from `lib/mock-dashboard.ts` — `StatsBar` was never coupled to mock data itself, only its former caller was.
+
+**Pattern notes:**
+`app/dashboard/page.tsx` now runs one real `jobs` query (`select("match_score, company_research, found_at")`, scoped `.eq("user_id", …)`) alongside its existing `is_complete` lookup. The 4 numbers are computed by a new pure function, `computeDashboardStats()` in `lib/dashboard-stats.ts` — no DB access inside it, matching the `lib/` boundary in `architecture.md`. It takes a narrow `Pick<JobRow, "match_score" | "company_research" | "found_at">[]` rather than a full `JobRow[]`, matching the exact columns the page actually selects.
+
+**Trend badges are empty (`trend: ""`) on all 4 real cards**, unlike Feature 14's mock `+12%`/`+3%`. There is no historical-snapshot data anywhere in the schema to compute a real week-over-week delta from — `StatsBar.tsx`'s existing conditional (`{stat.trend && (...)}`) already hides the badge when empty, so no component change was needed, only real data flowing through the same shape. `DashboardStat.trend` stays in the type for a possible future snapshot mechanism.
+
+Avg. Match Rate treats `match_score IS NULL` as excluded from both the count and the average — same "unknown, not zero" semantics Feature 11 established for the Find Jobs match filters — and renders `"—"` / `"No scored jobs yet"` when nothing is scored yet, rather than a misleading `0%`.
+
+### Feature 16 — Recent Activity (Real Data)
+
+Files: app/dashboard/page.tsx, components/dashboard/RecentActivity.tsx, lib/recent-activity.ts, app/api/agent/research/route.ts, types/index.ts, migrations/20260815095002_add-company-researched-at.sql, lib/mock-dashboard.ts
+
+Last updated: 2026-08-15
+
+No new visual classes — `RecentActivity.tsx`'s markup, dot-color logic, and empty state are all unchanged from Feature 14/15. What changed is the data source: `activity: MockActivity[]` became `activity: ActivityEntry[]` (new type in `lib/recent-activity.ts`, identical shape), and `MockActivity`/`MOCK_ACTIVITY` were deleted from `lib/mock-dashboard.ts` — same pattern as Feature 15's `MockStat` removal.
+
+**Pattern notes:**
+`app/dashboard/page.tsx` runs two additional real queries alongside its Feature 15 stats query: `agent_runs` filtered to `status = "completed"`, and `jobs` filtered on `company_researched_at IS NOT NULL`, each ordered descending and capped at 10 before merging. A new pure function, `buildRecentActivity()` in `lib/recent-activity.ts`, merges both arrays by actual timestamp (true chronological order across sources, not grouped by type), formats each into the build plan's exact copy ("Found X jobs for [jobTitle]" / "Researched [company]") using the existing `formatRelativeDate()` from `lib/utils.ts`, and slices to 10 — no DB access inside it, matching the `lib/` boundary `lib/dashboard-stats.ts` established in Feature 15.
+
+**Schema addition:** `jobs.company_researched_at` (new migration, applied live) — `found_at` is set once at job-discovery time and is never touched by the research route, so it cannot represent when research (a separate, later action) actually happened. `app/api/agent/research/route.ts`'s existing dossier-save `.update()` now also sets this timestamp in the same call, so a saved dossier and its timestamp can never drift apart.
+
+`RecentActivity.tsx`'s dot-coloring, alternating job-search colors, and empty state (established in Feature 14, see above) required zero changes — the component was already decoupled from mock data, consuming only the generic `{ id, type, text, timestamp }` shape.
+
+### Feature 17 — Analytics Charts (Real Data)
+
+Files: app/dashboard/page.tsx, components/dashboard/AnalyticsCharts.tsx, lib/analytics-charts.ts, lib/mock-dashboard.ts (deleted), context/library-docs.md
+
+Last updated: 2026-08-15
+
+**Data source changed from the build plan's spec.** The build plan called for PostHog event queries; that's not buildable in this codebase — see progress-tracker.md's 2026-08-15 decision note for the full investigation (no query API on `posthog-node`, no MCP/personal API key, and `job_found`'s captured properties never included `matchScore` in the first place, so the Match Score chart had no PostHog data behind it regardless). All three charts are wired to the same `jobs` table query Feature 15 already runs, extended with `company_researched_at`, plus three new pure functions in `lib/analytics-charts.ts` (`buildJobsFoundOverTime`, `buildCompanyResearchActivity`, `buildMatchScoreDistribution`) — no DB access inside them, same `lib/` boundary as `dashboard-stats.ts`/`recent-activity.ts`.
+
+**New visual pattern — chart empty state.** `AnalyticsCharts.tsx`'s shared `ChartCard` now takes `hasData: boolean` and an `emptyMessage`, rendering `text-sm font-medium text-text-muted` centered in the same `h-64` slot the chart occupies when `hasData` is false — matching `RecentActivity.tsx`'s existing empty-state text style exactly, so the dashboard has one empty-state look across every card, not per-component variants. Each chart component takes `data` and `hasData` as separate props (`hasData` isn't derived from `data.length` inside the component) because an all-zero 30-day window is a legitimate populated state — a brand-new account, with zero `jobs` rows at all, is the actual empty state.
+
+**Pattern notes:**
+`buildJobsFoundOverTime`/`buildCompanyResearchActivity` bucket by day in **UTC**, not the viewer's local timezone — a Server Component has no access to browser timezone, and this matches `formatRelativeDate()`'s existing UTC-naive precedent in `lib/utils.ts`. Both always emit a full window (30 and 7 UTC calendar days respectively) with explicit zero-fill for days with no rows, rather than only the days that have data — a day with zero jobs is a real zero, not a gap to omit. `buildMatchScoreDistribution` reuses the same 5 ranges from `lib/mock-dashboard.ts`'s old mock shape (50-60/60-70/70-80/80-90/90-100), with the upper bound of the last range inclusive (100 counts) and all others exclusive at the top, so a boundary score like exactly 60 lands in one bucket only.
+
+`lib/mock-dashboard.ts` deleted — Feature 17 was its last consumer (Features 15/16 already emptied it of stats/activity mocks).

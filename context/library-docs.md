@@ -291,220 +291,139 @@ const jobRecord = {
 
 ---
 
-## Browserbase
+## Company Research (fetch-based, not Browserbase/Stagehand)
 
-**Check first:** Check AGENTS.md for an installed Browserbase skill. If a Browserbase MCP server is configured — use it. The skill/MCP will have the latest session management and API patterns.
+**2026-08-14 — Feature 13 correction:** the build plan originally specified Browserbase +
+Stagehand + GPT-4o for this feature. None of the three are present in this project —
+no `@browserbasehq/*` packages, no `BROWSERBASE_*` env vars, no `OPENAI_API_KEY` — and
+adding them would mean a new paid service and a second LLM provider outside `lib/ai`
+just for one feature. Company research instead uses plain server-side `fetch()` for the
+website and the existing `lib/ai` layer for synthesis. If Browserbase/Stagehand are ever
+actually installed later, this section should be rewritten against their real docs
+first — do not resurrect the snippets below from git history and assume they still
+apply.
 
-### Session Creation — Company Research
-
-```typescript
-import Browserbase from "@browserbasehq/sdk";
-
-const bb = new Browserbase({ apiKey: process.env.BROWSERBASE_API_KEY! });
-
-// Single session for company research — sequential page visits
-const session = await bb.sessions.create({
-  projectId: process.env.BROWSERBASE_PROJECT_ID!,
-  timeout: 120, // 2 minute session — visits 3-4 pages max
-});
-```
-
-**Important — Browserbase runs independently from your Next.js server:**
-Browserbase sessions run on Browserbase's cloud infrastructure, not inside your Next.js API route. The API route triggers the Browserbase session and returns a response while the session continues running independently on Browserbase's platform. Do not add `maxDuration` or any timeout configuration to Next.js API routes to accommodate Browserbase session length.
-
-**Rules:**
-
-- Always use single sessions — never parallel sessions (free plan limit)
-- Session timeout is 120 seconds — sufficient for 3-4 page visits
-- Always end sessions cleanly — call stagehand.close() when done
-- Project ID always from `process.env.BROWSERBASE_PROJECT_ID` — never hardcode
-- Browserbase client lives in `lib/browserbase.ts` — always import from there
-
----
-
-## Stagehand
-
-**Check first:** Check AGENTS.md for an installed Stagehand skill. If a Stagehand MCP server is configured — use it. The skill/MCP will have the latest act() and extract() patterns.
-
-### Initialisation
-
-```typescript
-import { Stagehand } from "@browserbasehq/stagehand";
-
-const stagehand = new Stagehand({
-  env: "BROWSERBASE",
-  apiKey: process.env.BROWSERBASE_API_KEY!,
-  projectId: process.env.BROWSERBASE_PROJECT_ID!,
-  browserbaseSessionID: session.id,
-  model: { modelName: "openai/gpt-4o", apiKey: process.env.OPENAI_API_KEY! },
-  disablePino: true,
-});
-
-await stagehand.init();
-const page = stagehand.context.activePage()!;
-```
-
-### extract()
-
-```typescript
-import { z } from "zod";
-
-const result = await stagehand.extract({
-  instruction:
-    "Extract the company overview, main product description, and any technology mentions from this page.",
-  schema: z.object({
-    companyOverview: z.string().optional(),
-    mainProduct: z.string().optional(),
-    techMentions: z.array(z.string()).optional(),
-    navLinks: z
-      .array(
-        z.object({
-          label: z.string(),
-          url: z.string(),
-        }),
-      )
-      .optional(),
-  }),
-});
-```
-
-### act()
-
-```typescript
-// Always wrap in try/catch
-try {
-  await stagehand.act({
-    action: "Click the About link in the navigation",
-  });
-} catch (error) {
-  await logAgentError(jobId, null, error);
-}
-```
-
-## Company Research Section
-
-Replace the existing Stagehand "Company Research Pattern" section in library-docs.md with this:
-
----
-
-### Company Research Pattern
-
-Three-step process: homepage extraction → sub-page extraction → GPT-4o synthesis.
 Job description and user profile come from DB — never re-fetch what you already have.
-Browser's only job is the company website.
+Fetch's only job is the company website.
+
+### Homepage derivation
+
+Follow the job's `external_apply_url` server-side and read where it lands:
 
 ```typescript
-// Step 1 — Homepage extraction
-const homepageData = await stagehand.extract({
-  instruction:
-    "This is a company's homepage. Capture what the company actually does, who it's for, and any concrete signals (funding, customers, scale, mission, recent launches). Then find the internal links most worth visiting to research them as an employer.",
-  schema: z.object({
-    oneLiner: z.string().describe("What the company does in one sentence"),
-    productSummary: z
-      .string()
-      .describe("What they build/sell and who it's for"),
-    signals: z
-      .array(z.string())
-      .describe("Funding, notable customers, scale, mission, recent news"),
-    pageLinks: z
-      .array(
-        z.object({
-          url: z.string(),
-          kind: z.enum([
-            "about",
-            "careers",
-            "blog",
-            "engineering",
-            "product",
-            "team",
-            "other",
-          ]),
-        }),
-      )
-      .describe("Internal links worth visiting"),
-  }),
+const res = await fetch(externalApplyUrl, {
+  redirect: "follow",
+  signal: AbortSignal.timeout(5000),
 });
+const host = new URL(res.url).hostname;
+```
 
-// If oneLiner and productSummary are empty — wrong site or parked domain
-// Skip to synthesis with job description and profile only
-if (!homepageData.oneLiner && !homepageData.productSummary) {
-  await stagehand.close();
-  // proceed to synthesis with empty companyResearch
-}
+Adzuna redirects overwhelmingly land on ATS platforms (`boards.greenhouse.io/acme`,
+`jobs.lever.co/acme`, `*.myworkdayjobs.com`), not the employer's own domain. Stripping
+the subdomain off an ATS host produces the ATS vendor's own domain, not the employer's —
+check the resolved host against a blocklist before trusting it:
 
-// Step 2 — Sub-page extraction (max 3, prefer about/blog/engineering/product over careers)
-const subPageData = await stagehand.extract({
-  instruction:
-    "Extract substance that helps a candidate understand this company before applying: what they do, their values and how they work, the specific technologies and tools they use, notable projects or customers, and how the team operates. Ignore nav, footers, cookie banners, and generic marketing copy.",
-  schema: z.object({
-    keyPoints: z.array(z.string()),
-    technologies: z
-      .array(z.string())
-      .describe("Specific languages, frameworks, tools, platforms"),
-    valuesOrCulture: z
-      .array(z.string())
-      .describe("Stated values, working style, team norms"),
-    notable: z
-      .array(z.string())
-      .describe("Customers, funding, scale, projects, awards"),
-  }),
-});
+```typescript
+const ATS_HOSTS = [
+  "greenhouse.io",
+  "lever.co",
+  "myworkdayjobs.com",
+  "ashbyhq.com",
+  "smartrecruiters.com",
+  "workable.com",
+  "icims.com",
+  "taleo.net",
+  "jobvite.com",
+  "recruitee.com",
+  "teamtailor.com",
+  "breezy.hr",
+];
 
-// Step 3 — GPT-4o synthesis (after browser closes)
-// Feed three data sources: company research + job from DB + profile from DB
-const systemPrompt = `You are a sharp career strategist preparing a candidate to apply for a specific role. You are given (a) research collected from the company's own website, (b) the job posting, and (c) the candidate's profile. Produce a concise, concrete briefing that gives this specific candidate an edge for this specific role.
+const isAtsHost = ATS_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+```
+
+If the host is an ATS (or the fetch throws/times out), fall back to guessing
+`https://www.{slug(company)}.com` from the job's `company` column. If that guess also
+fails to resolve, skip web research entirely and proceed to profile-and-posting-only
+synthesis — never research a domain that might not actually be the employer.
+
+### Page fetch and text extraction
+
+No HTML parser dependency — strip `<script>`/`<style>`/`<nav>`/`<footer>`, drop tags,
+collapse whitespace, and hard-cap the result. Real pages run tens of thousands of
+characters; feeding that straight into a prompt repeats Feature 10's truncation bug.
+
+```typescript
+const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+const html = await res.text();
+const text = stripHtml(html).slice(0, MAX_PAGE_CHARS); // 900 — see the live-verified note below
+```
+
+Sub-page selection is plain string matching on anchor `href`/path against a small
+keyword list (`about`, `careers`, `blog`, `engineering`, `product`, `team`) — no LLM
+call needed to decide which links are worth visiting. Fetch at most 3 sub-pages,
+preferring about/blog/engineering/product over careers.
+
+If the homepage fetch fails, times out, or the stripped text is empty (JS-rendered
+shell with no server-rendered content) — skip sub-pages and proceed straight to
+synthesis with job description and profile only.
+
+### Synthesis — one call, not one per page
+
+Unlike the Stagehand-era plan (extract per page, then synthesize), the fetch-based
+version sends all fetched page text plus the job posting plus the profile into a
+**single** `generateJson` call. Per-page extraction was there to keep each Stagehand
+schema call small; with plain fetched text there's nothing to distill first.
+
+```typescript
+import { generateJson } from "@/lib/ai";
+
+const prompt = `You are a sharp career strategist preparing a candidate to apply for a specific role.
+You are given (a) research collected from the company's own website (may be absent),
+(b) the job posting, and (c) the candidate's profile. Produce a concise, concrete
+briefing that gives this specific candidate an edge for this specific role.
 
 Rules:
-- Ground every company claim in the provided research or job posting. Never invent funding, customers, headcount, or facts. If research was thin, infer carefully from the job posting and say what's inferred.
-- Be specific to THIS candidate. Connect their actual skills and past work to this company's stack, product, and values. No generic advice that would apply to anyone.
-- Turn the candidate's missing skills into a strategy: how to frame the gap honestly and what adjacent experience to lean on.
-- Talking points and questions must reference real things from the research, the kind of detail that signals the candidate did their homework.
+- Ground every company claim in the provided research or job posting. Never invent
+  funding, customers, headcount, or facts. If research is absent or thin, infer
+  carefully from the job posting and say what's inferred.
+- Be specific to THIS candidate. Connect their actual skills and past work to this
+  company's stack, product, and values. No generic advice that would apply to anyone.
+- Turn the candidate's missing skills into a strategy: how to frame the gap honestly
+  and what adjacent experience to lean on.
+- Talking points and questions must reference real things from the research, the kind
+  of detail that signals the candidate did their homework.
 - Keep every item tight: one or two sentences. No fluff.
 
-Return ONLY valid JSON matching this shape:
-{
-  "companyOverview": string,
-  "techStack": string[],
-  "culture": string[],
-  "whyThisRole": string,
-  "yourEdge": string[],
-  "gapsToAddress": string[],
-  "smartQuestions": string[],
-  "interviewPrep": string[],
-  "sources": string[]
-}`;
-
-const userPrompt = `COMPANY RESEARCH (from their website):
-${JSON.stringify(companyResearch)}
+COMPANY RESEARCH (from their website, may be empty):
+${fetchedPagesText}
 
 JOB POSTING:
 Title: ${job.title}
 Company: ${job.company}
-Description: ${job.description}
-Matched skills (already computed): ${job.matched_skills.join(", ")}
-Missing skills (already computed): ${job.missing_skills.join(", ")}
+Description: ${job.about_role}
+Matched skills: ${job.matched_skills.join(", ")}
+Missing skills: ${job.missing_skills.join(", ")}
 
 CANDIDATE PROFILE:
 Current title: ${profile.current_title}
 Experience: ${profile.years_experience} years, level ${profile.experience_level}
 Skills: ${profile.skills.join(", ")}
-Work history: ${JSON.stringify(profile.work_experience)}`;
+Work history: ${profile.work_experience.map((w) => `${w.title} at ${w.company}`).join("; ")}`;
 
-const response = await openai.chat.completions.create({
-  model: "gpt-4o",
-  response_format: { type: "json_object" },
+const result = await generateJson<CompanyDossier>({
+  prompt,
+  schema: COMPANY_DOSSIER_SCHEMA,
+  schemaName: "company_dossier",
   temperature: 0.4,
-  messages: [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userPrompt },
-  ],
+  maxOutputTokens: 6000,
 });
 ```
 
 **Dossier fields:**
 
 | Field           | Type     | Purpose                                             |
-| --------------- | -------- | --------------------------------------------------- |
+| --------------- | -------- | ---------------------------------------------------- |
 | companyOverview | string   | What the company does                               |
 | techStack       | string[] | Technologies they use                               |
 | culture         | string[] | Values and working style                            |
@@ -513,20 +432,20 @@ const response = await openai.chat.completions.create({
 | gapsToAddress   | string[] | Missing skills reframed as strategy                 |
 | smartQuestions  | string[] | Questions that show real research                   |
 | interviewPrep   | string[] | Topics to prepare for this role                     |
-| sources         | string[] | Pages the company info came from                    |
+| sources         | string[] | Pages the company info came from (empty if none fetched) |
+| grounded        | boolean  | Whether any company page contributed text — drives the UI's "posting only" notice |
 
 **Rules:**
 
-- Always use `extract()` with a Zod schema — never parse raw HTML or use regex
-- Always wrap every `act()` and `extract()` in try/catch
-- Always call `await stagehand.close()` when done — ends the Browserbase session
-- Model is always `gpt-4o` — never use other models
+- Never parse HTML with regex beyond simple tag-stripping — no `act()`/click-through, no JS execution, so nothing behind a JS-rendered shell is reachable
+- Always wrap every `fetch()` in try/catch with `AbortSignal.timeout`
+- Model comes from `lib/ai` (`generateJson`) — never call a provider SDK directly
 - Temperature is `0.4` for synthesis — grounded but flexible enough to make real connections
-- Max 3 sub-pages — never exceed this on free plan
-- Always close session in finally block — never leave sessions open even if research fails
-- Job description and profile always come from DB — never re-fetch via browser
-- If browser research returns empty — still run synthesis with job + profile only
+- Max 3 sub-pages, each capped at `MAX_PAGE_CHARS` (900 chars) before prompting — same discipline as Feature 10's `MAX_DESCRIPTION_LENGTH`. Verified live against Groq's 8000 TPM limit: a 2000-char cap across 4 real fetched pages (homepage + 3 sub-pages) pushed a real request to 8152 tokens and Groq rejected it outright (`HTTP 413`); 900 chars per page brought the same real 4-page prompt comfortably under the limit
+- Job description and profile always come from DB — never re-fetch what's already loaded
+- If web research returns nothing — still run synthesis with job + profile only, and mark `grounded: false`
 - yourEdge, gapsToAddress, and smartQuestions are the most valuable fields — never skip them
+- This step runs synchronously in the request (no background job) — budget roughly 20s total across all fetches plus the synthesis call
 
 ## AI Providers (Gemini + Groq)
 
@@ -657,6 +576,8 @@ holds the user's spinner open. The fallback tries the *other* provider instead.
 
 **Check first:** Check AGENTS.md for an installed PostHog skill. If a PostHog MCP server is configured — use it. The skill/MCP will have the latest client and server patterns.
 
+**2026-08-15 — Feature 17 correction: PostHog is write-only in this project, and reading events back out is not currently possible.** `posthog-node` 5.38.2 has no query/insights/HogQL method anywhere in its public API (verified against its `.d.ts`) — it's a capture-only SDK. The PostHog MCP server requires OAuth that hasn't been granted. `.env.local` holds only the project write token and the EU ingestion host, not the personal API key (`phx_…`, `query:read` scope) or numeric project ID the Query API needs. If a future feature genuinely needs PostHog data read back (not just written), all three gaps need closing first — don't assume any of them are solved by the time you read this; verify again. Feature 17's dashboard charts were built against the InsForge `jobs` table instead once this became clear — see `progress-tracker.md`'s 2026-08-15 note.
+
 ### Client Setup (Browser)
 
 ```typescript
@@ -676,7 +597,6 @@ export function initPostHog() {
 posthog.capture("job_found", {
   userId,
   source: "search",
-  matchScore: score,
 });
 ```
 

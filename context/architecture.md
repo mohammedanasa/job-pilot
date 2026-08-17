@@ -268,6 +268,7 @@ before they ever open the profile form.
 | matched_skills     | text[]      | Skills user has that match                     |
 | missing_skills     | text[]      | Skills user lacks                              |
 | company_research   | jsonb       | Company dossier from research agent            |
+| company_researched_at | timestamptz | Set when company_research is saved — null until researched. Added in migration `20260815095002`, Feature 16, because found_at is set once at discovery time and cannot represent when research (a separate, later action) actually happened |
 | found_at           | timestamptz |                                                |
 
 ### `agent_logs`

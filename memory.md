@@ -1,67 +1,55 @@
-# Memory — Feature 10 (Adzuna Job Discovery)
+# Memory — Feature 17 (Analytics Charts — Real Data, final build-plan feature)
 
-Last updated: 2026-08-14
+Last updated: 2026-08-15
 
 ## What was built
 
-**Feature 10 — Adzuna Job Discovery**, planned via `/architect` then implemented, wiring the Find Jobs page to real search/scoring/persistence:
+**Feature 17 — Analytics Charts**, built via `/architect` after investigating and discarding the build plan's specified data source:
 
-- `lib/utils.ts` — new file (mandated by `code-standards.md` since Feature 01 but never created). Exports `MATCH_THRESHOLD = 70` and `formatRelativeDate()`.
-- `lib/adzuna.ts` — `AdzunaJob` type, `detectCountry()` (keyword map: uk/london→gb, australia/sydney→au, canada/toronto→ca, else us), `searchJobs()`.
-- `agent/types.ts` — `ScoredJob`, `DiscoverJobsResult`.
-- `agent/matcher.ts` — `scoreJobs()`: one batched `generateJson` call scores up to 10 jobs at once, results mapped back by array `index` (same pattern as Feature 08's resume bullets).
-- `agent/adzuna.ts` — `discoverJobs()` orchestration: creates `agent_runs` row → calls Adzuna → dedupes against user's existing `jobs.source_url` → calls `scoreJobs()` → inserts all scored jobs (not just strong matches) → updates `agent_runs` to completed/failed. Never throws; logs failures to `agent_logs`.
-- `app/api/agent/find/route.ts` — rewritten: added a minimal-profile gate (skills + title-or-role required, 422 if unmet) before any AI call, calls `discoverJobs`, fires `job_found` once per saved job, returns `{ found, saved, strongMatches }`.
-- `app/find-jobs/page.tsx` — now queries the real `jobs` table for the current user (newest-first) instead of `MOCK_JOBS`.
-- `components/find-jobs/JobsTable.tsx` — retyped from `MockJob` to real `JobRow` (`types/index.ts`); added an empty state (centered icon + text) for zero-jobs users, per `ui-rules.md`'s empty-state rule.
-- `components/find-jobs/SearchControls.tsx` — now `"use client"`: controlled inputs, submit handler, loading spinner, real success banner ("Found N jobs — M strong matches") and a new error banner (`bg-error`/`text-error-foreground` — the only error token available, no `-lightest` variant exists unlike success/info).
-- `types/index.ts` — added `JobRow` type matching the `jobs` table schema.
-- `lib/mock-jobs.ts` — deleted, nothing imports it anymore.
-- Docs updated: `progress-tracker.md` (Feature 10 marked done, decision log, verification notes, the mid-session bug fix), `ui-registry.md` (Feature 09 entry trimmed to what's still true, new Feature 10 entry), `code-standards.md` (env var table — `OPENAI_API_KEY` row replaced with `GEMINI_API_KEY`/`GROQ_API_KEY`/`AI_PROVIDER`, which was already stale from the Feature 08-era provider switch).
+- `lib/analytics-charts.ts` — new. Three pure functions: `buildJobsFoundOverTime`, `buildCompanyResearchActivity`, `buildMatchScoreDistribution`. No DB access, matching the `dashboard-stats.ts`/`recent-activity.ts` `lib/` boundary.
+- `app/dashboard/page.tsx` — Feature 15's existing `jobs` query extended with `company_researched_at`; three chart-builder calls added; both `MOCK_*` imports removed.
+- `components/dashboard/AnalyticsCharts.tsx` — `ChartCard` now takes `hasData`/`emptyMessage`; all three chart components take real `DayCount`/`ScoreRangeCount` types from `lib/analytics-charts.ts` instead of `Mock*` types from the now-deleted mock file. Added `allowDecimals={false}` to all Y axes (integer counts).
+- `lib/mock-dashboard.ts` — deleted. Was already emptied of stats/activity mocks by Features 15/16; this was its last consumer.
+- `context/library-docs.md` — PostHog section corrected: removed a `matchScore` capture-property example that was never actually implemented in `app/api/agent/find/route.ts`, added a note documenting that PostHog is write-only in this codebase (no query API, no MCP auth, no personal API key).
+- `context/progress-tracker.md`, `context/ui-registry.md` — Feature 17 entries added; build plan marked fully complete (all 17 features, all 5 phases).
 
 ## Decisions made
 
-Resolved via `/architect` before building, all reasoned from downstream Feature 11/12 needs rather than the build plan's literal wording:
-
-- **All scored jobs are saved, not just strong (≥70) matches.** Feature 11's Low Match filter needs weak matches to exist in the DB. Banner copy changed from the build plan's implied "saved M strong matches" to "Found N jobs — M strong matches."
-- **Scoring is one batched AI call per search, not one call per job.** Verified live against Groq at realistic 10-job scale (see Problems Solved). Keeps it to 1 request against a 30 RPM free tier instead of 10.
-- **The jobs table is wired to real DB data in this feature**, not deferred to Feature 11 as the build plan scoped it — otherwise a successful search would be invisible in the UI, same shape as the Feature 07 failure.
-- **Duplicates skipped by `source_url`** against the user's existing rows, checked before scoring (saves AI quota on repeat searches). No new migration/column.
-- **Profile gate: skills + (current title or ≥1 work experience)**, not `is_complete` — mirrors Feature 08's precedent; `is_complete` also demands salary expectation and cover letter tone, irrelevant to matching.
-- **`responsibilities`, `requirements`, `nice_to_have`, `benefits`, `about_company` are left null on inserted rows.** Adzuna's ~500-char snippet doesn't support them; inventing them via AI would render as fact on the Job Details page. **Feature 12 must render empty states for these five fields — this is a real handoff, not a nice-to-have.**
+- **PostHog was ruled out entirely, not partially.** Four independent findings, all negative: `posthog-node` 5.38.2 has no query/insights/HogQL method in its public API (verified against the installed `.d.ts`); the PostHog MCP server needs OAuth that isn't granted; `.env.local` has only the write token and ingestion host, no personal API key or project ID; and even with full access, `job_found`'s actual captured properties (`{ userId, source }`) never included `matchScore` in the first place, so the Match Score chart had no PostHog data behind it regardless of API access. This was investigated and confirmed with the developer before `/architect` was invoked, not discovered mid-build.
+- **All three charts wired to the InsForge `jobs` table instead of PostHog.** Feature 15's existing dashboard query already had `match_score` and `found_at`; only `company_researched_at` (Feature 16's column) needed adding. No new query, no new round trip, no new dependency, no new credentials.
+- **Day buckets are UTC**, not the viewer's local timezone — a Server Component can't read browser timezone, and `lib/utils.ts`'s `formatRelativeDate()` already set the timezone-naive precedent in this codebase. Accepted as consistent with existing behavior, not a new gap introduced by this feature.
+- **Both day-bucketed charts always emit their full window with zero-fill** (30 days for Jobs Found Over Time, 7 for Company Research Activity) rather than only days with data — a zero-activity day is a real bar, not a gap.
+- **Match Score Distribution bucket boundaries are exclusive except the top range's upper bound**, so a score of exactly 60 lands only in "60-70%" and 100 is captured by "90-100%" rather than falling outside every bucket.
+- **`hasData` is a separate prop from `data`, computed by the caller from the raw `jobs` array**, not derived by checking if every bucket in `data` is zero. This distinguishes "brand new account, zero jobs ever" (true empty state) from "5 real jobs, all outside the 30-day window" (a legitimate all-zero chart that isn't actually empty).
+- **New chart empty state matches `RecentActivity.tsx`'s existing empty-state text style exactly** (`text-sm font-medium text-text-muted`, centered in the same `h-64` slot) — establishes one dashboard-wide empty-state look rather than a per-component variant.
 
 ## Problems solved
 
-**Mid-session bug, found by the developer's own browser testing, fixed via `/recover` (diagnosed as Failure Mode 1 — isolated, specific, first attempt):**
-
-`agent/matcher.ts`'s scoring prompt had no input or output bound. Real Adzuna descriptions (up to several hundred words) times up to 10 jobs, plus a full `work_experience` JSON dump, either tripped Groq's request-size limit outright (`HTTP 400`, silently fell over to Gemini and took 44s) or exhausted the fixed 4000-token reply budget mid-batch (`response truncated`, surfaced to the user as "The AI response was cut short").
-
-My original verification during the build only tested a 2-job toy example — proved the schema *shape* worked, not that it survives *real data volume*. Those are different claims and I conflated them.
-
-**Fix:** capped each job description at 600 chars before prompting (`MAX_DESCRIPTION_LENGTH`), reduced `work_experience` in the prompt to a short "title at company" list instead of the full JSON blob, tightened `matchReason` to 1-2 sentences/≤200 chars (was "one paragraph"/≤400), capped skill arrays at 8 items (was 15), raised `maxOutputTokens` 4000→6000. Re-verified live against Groq with 10 real, full-length, untruncated Adzuna descriptions — `finish_reason: "stop"`, all 10 scores returned correctly indexed.
-
-**Lesson for future AI-call features in this project: verify at realistic data volume, not a toy example.** A 2-item test proves the schema parses; it does not prove the prompt fits the model's actual limits under real input sizes. Re-check this same class of risk before Feature 13's company-research synthesis, which also fans multiple sources into one call.
+No implementation bugs this session — `lib/analytics-charts.ts` passed its `tsx` verification run on the first attempt (window lengths, zero-fill, boundary bucketing, out-of-window exclusion all correct immediately). The real problem solved was investigative: confirming PostHog genuinely has no query path available in this codebase before writing any code against it, rather than discovering that mid-build the way Features 10/13 discovered their gaps.
 
 ## Current state
 
-- Feature 10 code complete, including the post-testing bug fix. `npm run lint` and `npm run build` both pass.
-- Verified live outside the browser (no OAuth automation available — same limitation Feature 09 had): Adzuna search confirmed against the real API; Groq scoring confirmed against the real API at both toy scale and, after the bug, at realistic 10-job scale; route auth/validation (400/401) confirmed against the running dev server.
-- **The developer then tested in the real browser and hit the scoring-prompt bug** (see Problems Solved) — this is the first real end-to-end browser signal this feature has had. The fix has been re-verified against the live Groq API but **not yet re-confirmed by the developer in the browser** — that loop isn't closed yet.
-- **Feature 10 is entirely uncommitted**, by explicit developer choice — held pending browser sign-off, per this session's decision to wait rather than commit speculatively. Note Feature 09 (which prior memory had flagged as uncommitted for three sessions running) was committed at some point outside this conversation as `6b994f1` — the multi-session uncommitted-backlog problem resolved itself and does not need to be re-flagged.
+- **The entire build plan is complete.** All 17 features across all 5 phases are code-complete. `npm run lint`, `npx tsc --noEmit`, and `npm run build` all pass cleanly.
+- `/dashboard` still builds as `ƒ` (dynamic) and still 307-redirects unauthenticated requests.
+- **First genuine live browser verification of any dashboard feature happened this session, by accident.** A separate dev server (from an earlier, unrelated session) was found already running with a real authenticated user actively on `/dashboard`/`/find-jobs/…` while this feature was being built. Its logs showed transient `MOCK_COMPANY_RESEARCH_ACTIVITY is not defined` errors at the exact moment `lib/mock-dashboard.ts` was deleted mid-edit (expected Turbopack HMR lag), then clean recompiles afterward — meaning that real user's real dashboard load, with their actual DB data, rendered successfully against this feature's finished code. This is the first time any feature in the whole dashboard phase has had genuine logged-in browser confirmation rather than a synthetic-data screenshot.
+- No Playwright/screenshot MCP tool was available this session (unlike Features 09–14, which used one), so pixel-level visual comparison wasn't repeated for Feature 17. Verification instead used: (1) pure-function tests under `tsx`, (2) a temporary `dev-preview-charts` route inspected via `curl`/HTML grep for correct titles and empty-state copy, (3) the live authenticated render described above. The temporary route was deleted; nothing was left in the final build.
+- Nothing has been committed. Features 13 through 17 are all still uncommitted working-tree changes, held pending developer sign-off — same practice as every session before this one.
 
 ## Next session starts with
 
 1. `/remember restore`
-2. **Get the developer's confirmation that the re-run search actually works now** — banner shows real counts, table fills with real scored jobs, no more truncation/400 errors. This is the loop left open at session end.
-3. Once confirmed: commit Feature 10 (`lib/utils.ts`, `lib/adzuna.ts`, `agent/`, the modified route/page/components, `types/index.ts`, doc updates, `lib/mock-jobs.ts` deletion).
-4. Then Feature 11 — Filter + Sort + Pagination, wiring `JobsFilterBar` and `Pagination` (currently still inert/static) to the same `jobs` query already in `app/find-jobs/page.tsx`.
+2. **There is no next planned feature — the build plan is finished.** The developer needs to decide what comes next: a real end-to-end browser QA pass (now genuinely possible per the live verification above, unlike every earlier feature), a commit/PR strategy for the 5 uncommitted features (13–17), or deployment. This is a developer decision point, not a default next build-plan line item — don't assume which one without asking.
+3. If real PostHog querying is ever wanted for a future feature (a "Feature 18" beyond the original plan), the three blockers documented in `library-docs.md`'s PostHog section need closing first: authorize the PostHog MCP server, or mint a personal API key (`phx_…`, `query:read` scope) plus find the numeric project ID, and decide whether to also start capturing `matchScore` on `job_found` events (currently not sent).
 
 ## Open questions
 
 - Carried forward, still unresolved:
-  - Completion percentage computed in two places (`app/profile/page.tsx` banner vs. `actions/profile.ts` `is_complete`) against separate nine-item lists — consolidating deliberately deferred as a scope call.
-  - `scripts/setup-db.sql` may still duplicate the migration — worth checking/deleting if so.
+  - Completion percentage computed in two places (`app/profile/page.tsx` banner vs. `actions/profile.ts` `is_complete`) against separate nine-item lists — consolidation still deliberately deferred.
+  - `scripts/setup-db.sql` may still duplicate the migration — never checked.
+  - Salary formatting is US-currency-shaped regardless of detected country (Feature 10) — known, not fixed.
+  - `lib/html-text.ts`'s HTML stripping is hand-rolled regex, not a real parser (Feature 13) — works on tested sites, not guaranteed elsewhere.
+  - The ATS blocklist (Feature 13, 12 hosts) is not exhaustive.
 - New from this session:
-  - Salary formatting (`$160k - $200k`) is US-currency-shaped regardless of detected country — a `gb`/`au`/`ca` search will show a `$` sign on a job actually priced in £/A$/C$. Known, not fixed — flagged as a limitation during planning, not addressed in code.
-  - Country detection in `lib/adzuna.ts` is a small hardcoded keyword list, not exhaustive — fine for now, would need revisiting if international search becomes a real use case.
-  - Feature 13 (company research) fans three sources into one AI call similarly to what broke here — worth deliberately checking its prompt size against real data before considering it "verified," not just a toy schema check.
+  - **The dashboard has never been seen by the developer's own eyes with real data, only inferred from logs.** The live browser session this session observed belonged to whatever session/window was already open — its outcome (a clean render) was confirmed via server logs, not by the developer or this session actually looking at the rendered page. A deliberate one-time click-through by the developer, now that all 5 dashboard features are wired to real data, would be the highest-value remaining verification step for this whole phase.
+  - **No Playwright/browser screenshot tool was available this session** — unclear if that's a permanent environment change or a one-off gap. Worth checking at the start of the next session if visual screenshot verification is needed again.
+  - `job_found` PostHog events still don't carry `matchScore`, `jobTitle`, or any other property beyond `{ userId, source }` — this was documented as a correction to stale docs, not fixed, since nothing currently reads it back out. If PostHog querying is ever added later, this capture call will need revisiting too.
