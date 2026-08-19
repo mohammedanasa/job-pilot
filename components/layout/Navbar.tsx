@@ -1,12 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/find-jobs", label: "Find Jobs" },
-  { href: "/profile", label: "Profile" },
-];
-
 export function Navbar() {
   return (
     <header className="h-16 border-b border-border bg-surface">
@@ -21,18 +15,6 @@ export function Navbar() {
             className="h-auto w-[106px]"
           />
         </Link>
-
-        <nav aria-label="Primary navigation" className="hidden items-center gap-8 md:flex">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="text-sm font-medium leading-5 text-text-dark transition-colors hover:text-accent"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
 
         <Link
           href="/login"

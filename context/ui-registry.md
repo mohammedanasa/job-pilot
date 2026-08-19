@@ -21,7 +21,7 @@ After building any component — update this file with the component name, file 
 ### Navbar
 
 File: components/layout/Navbar.tsx
-Last updated: 2026-06-06
+Last updated: 2026-08-19
 
 | Property         | Class                                                                 |
 | ---------------- | --------------------------------------------------------------------- |
@@ -30,13 +30,13 @@ Last updated: 2026-06-06
 | Border radius    | `none`                                                                |
 | Text — primary   | `text-text-dark text-sm font-medium leading-5`                        |
 | Text — secondary | `none`                                                                |
-| Spacing          | `h-16 px-6 gap-8`                                                     |
-| Hover state      | `hover:text-accent`                                                   |
+| Spacing          | `h-16 px-6`, `justify-between` (logo left, CTA right)                 |
+| Hover state      | `hover:bg-overlay` (CTA)                                              |
 | Shadow           | `none`                                                                |
-| Accent usage     | `hover:text-accent`, primary CTA uses `bg-overlay-dark text-accent-foreground` |
+| Accent usage     | primary CTA uses `bg-overlay-dark text-accent-foreground hover:bg-overlay` |
 
 **Pattern notes:**
-Header is full-width with a centered `max-w-[1268px]` inner row. Primary navigation uses color-only hover/active treatment and the CTA uses the dark overlay button pattern from the landing design.
+Header is full-width with a centered `max-w-[1268px]` inner row. Logged-out/public navbar only — no primary nav links. Dashboard/Find Jobs/Profile links were removed 2026-08-19: they pointed to authenticated-only routes, so a logged-out visitor clicking any of them just bounced straight to `/login` — dead links masquerading as navigation. Now just logo + "Start for free" CTA (`bg-overlay-dark text-accent-foreground`, `hover:bg-overlay`). Distinct from `AppNavbar` (see below), which is the authenticated-pages navbar and legitimately owns those three links plus the Profile dropdown — do not re-add them here; if public nav links are ever wanted again they should point to marketing/anchor sections, not app routes.
 
 ### Footer
 
@@ -310,7 +310,7 @@ Entire form is a single `"use client"` component with all state co-located. Sect
 ### AppNavbar
 
 File: components/layout/AppNavbar.tsx
-Last updated: 2026-08-14
+Last updated: 2026-08-19
 
 | Property         | Class                                                                 |
 | ---------------- | ---------------------------------------------------------------------- |
@@ -318,13 +318,16 @@ Last updated: 2026-08-14
 | Border           | `border-b border-border`                                              |
 | Border radius    | `none`                                                                |
 | Text — primary   | `text-text-dark text-sm font-medium leading-5`, active uses `text-accent` |
-| Spacing          | `h-16 px-6 gap-8`, nav items `gap-1.5 pb-4`                           |
+| Spacing          | `h-16 px-6 gap-8`, nav items `gap-1.5`                                |
 | Hover state      | `hover:text-accent`                                                   |
 | Shadow           | `none`                                                                |
-| Accent usage     | Active item text is `text-accent` with a `bg-accent` underline bar    |
+| Accent usage     | Active item text is `text-accent`; no underline indicator             |
 
 **Pattern notes:**
-`"use client"` — the only reason is `usePathname()` to compute active-state. Replaces the marketing `Navbar` on every authenticated page (Dashboard, Profile, Find Jobs); the public `Navbar` component is untouched and still used on the homepage. Each nav item has a small leading `lucide-react` icon (Dashboard: `LayoutGrid`, Find Jobs: `Search`, Profile: `UserRound`) and the active item gets a `text-accent` color change plus a 2px `bg-accent` underline bar (`absolute inset-x-0 -bottom-px h-0.5`), which corrects `ui-rules.md`'s earlier "no underline" note — the delivered Find Jobs design shows one. No marketing CTA renders here, unlike the public Navbar's "Start for free" button.
+`"use client"` — `usePathname()` for active-state, plus local `useState`/`useRef` for the Profile dropdown. Replaces the marketing `Navbar` on every authenticated page (Dashboard, Profile, Find Jobs); the public `Navbar` component is untouched and still used on the homepage. Each nav item has a small leading `lucide-react` icon (Dashboard: `LayoutGrid`, Find Jobs: `Search`, Profile: `UserRound`). Active item is indicated by `text-accent` color alone — the earlier 2px `bg-accent` underline bar (`absolute inset-x-0 -bottom-px h-0.5`) was removed 2026-08-19 per explicit developer feedback, reverting `ui-rules.md`'s "no underline" correction back to no-underline. Its removal also dropped the `pb-4` that had reserved space beneath each item for the bar — without it, `items-center` alone keeps nav items vertically centered against the logo. No marketing CTA renders here, unlike the public Navbar's "Start for free" button.
+
+**Profile dropdown (new 2026-08-19) — first custom menu component in this registry:**
+Plain button + `useState`(open) + `useRef` + `mousedown` click-outside listener — no menu/popover primitive is installed, matching Feature 09's precedent of not reaching for one. Trigger is a `flex items-center gap-1.5` button with the same nav-item text styling plus a trailing `ChevronDown` (`size={14}`) that rotates 180° (`transition-transform`) when open. Panel: `absolute right-0 top-full z-10 w-44 rounded-md border border-border bg-surface py-1 shadow-md`. Menu items: `flex items-center gap-2 px-3 py-2 text-sm font-medium leading-5 text-text-primary hover:bg-surface-secondary`, each with a small leading `lucide-react` icon, `role="menuitem"` on a `role="menu"` panel. This is the reference pattern for any future custom dropdown menu (as opposed to a native `<select>` pill, see Feature 09's filter dropdowns below).
 
 ### Feature 09 — Find Jobs Page (Full UI)
 
